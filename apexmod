@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""
+The uniform launcher for Apex Terminal.
+
+Every ApexBuild module has one of these, with the same three subcommands, so
+that the host -- and a person -- can start any app in the suite the same way
+without knowing anything about how that app is built:
+
+    ./apexmod info                       print the manifest as JSON
+    ./apexmod check                      verify this app can actually run here
+    ./apexmod run --host H --port P      serve on that address and stay up
+
+`run` prints one machine-readable line once it knows its own URL:
+
+    APEX-READY {"url": "http://127.0.0.1:8811/", "health": "/"}
+
+and then behaves like any other server: logs to stdout, exits 0 on SIGTERM.
+The line is optional -- ApexBuild falls back to polling http://host:port/ --
+but printing it is what lets an app whose entry URL carries a one-time token
+be framed correctly on the first try.
+
+Unknown options are ignored rather than rejected, so a newer ApexBuild can pass
+a flag an older module has never heard of without breaking it.
+"""
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
+
+def manifest() -> dict:
+    """The manifest, parsed. Kept in one place so `info` cannot drift from it."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        try:
+            import tomli as tomllib  # type: ignore
+        except ModuleNotFoundError:
+            return {}
+    path = ROOT / "apexmodule.toml"
+    if not path.is_file():
+        return {}
+    with path.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def ready(url: str, health: str = "/") -> None:
+    """Tell the host where to point the frame. One line, on stdout.
+
+    Skipped when a person is watching -- ApexBuild always reads this through a
+    pipe, never a terminal, so a tty means `./run.sh` in a shell and the line
+    would be nothing but noise above the app's own startup log.
+    """
+    if sys.stdout.isatty() and not os.environ.get("APEX_HOST"):
+        return
+    sys.stdout.write("APEX-READY " + json.dumps({
+        "url": url, "health": health, "pid": os.getpid(),
+    }) + "\n")
+    sys.stdout.flush()
+
+
+def cmd_info(args) -> int:
+    print(json.dumps(manifest(), indent=2))
+    return 0
+
+
+def cmd_check(args) -> int:
+    """Everything that has to be true before `run` can work.
+
+    Worth keeping honest: this is what `apex doctor` reports, and a check that
+    passes on a machine where the app then fails to start is worse than no
+    check at all.
+    """
+    problems, notes = [], []
+    if sys.version_info < (3, 8):
+        problems.append(f"needs Python 3.8+, this is {sys.version.split()[0]}")
+    for rel in ("app/server.py", "app/pty_session.py", "app/websocket.py",
+                "app/static/index.html", "app/static/vendor/xterm/xterm.min.js"):
+        if not (ROOT / rel).is_file():
+            problems.append(f"{rel} is missing")
+
+    # A PTY is the one thing this app cannot do without, and the standard
+    # library only has one on POSIX. Reported as a note rather than an error:
+    # the app still starts, serves its UI and says why it cannot open a shell,
+    # which is more use than refusing to launch.
+    try:
+        from app import pty_session
+    except Exception as e:
+        problems.append(f"cannot import the app: {e!r}")
+    else:
+        if pty_session.supported():
+            notes.append(f"pty available; shell is {pty_session.DEFAULT_SHELL}")
+        else:
+            notes.append("NO PTY: " + pty_session.unsupported_reason())
+
+    for line in problems:
+        print(f"error: {line}", file=sys.stderr)
+    if problems:
+        return 1
+    print(f"Apex Terminal -- standard library only, Python {sys.version.split()[0]}")
+    for line in notes:
+        print(line)
+    return 0
+
+
+def cmd_run(args) -> int:
+    from app import server
+
+    host, port = args.host, args.port
+    ready(f"http://{host}:{port}/", "/")
+    return server.serve(
+        host=host,
+        port=port,
+        data_dir=args.data_dir or os.environ.get("APEX_DATA_DIR") or "",
+        # Set when ApexBuild is framing this app; see docs/EMBEDDING.md. When
+        # it is empty the app is standalone and refuses framing entirely.
+        embed_origin=args.embed_origin or os.environ.get("APEX_EMBED_ORIGIN") or "",
+        open_browser=not args.no_open,
+    )
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(prog="apexmod", description="Apex Terminal launcher")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("info", help="print the manifest as JSON").set_defaults(fn=cmd_info)
+    sub.add_parser("check", help="verify the app can run here").set_defaults(fn=cmd_check)
+
+    r = sub.add_parser("run", help="serve the app")
+    r.add_argument("--host", default="127.0.0.1")
+    r.add_argument("--port", type=int, default=0)
+    r.add_argument("--data-dir", default="")
+    r.add_argument("--embed-origin", default="")
+    r.add_argument("--no-open", action="store_true",
+                   help="do not open a browser (always set under ApexBuild)")
+    r.set_defaults(fn=cmd_run)
+
+    # parse_known_args, not parse_args: see the note about unknown options above.
+    args, extra = p.parse_known_args(argv)
+    if extra:
+        print(f"apexmod: ignoring unknown option(s): {' '.join(extra)}",
+              file=sys.stderr)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

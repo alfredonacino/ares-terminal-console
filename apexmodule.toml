@@ -1,0 +1,31 @@
+# What makes this directory an ApexBuild module.
+#
+# ApexBuild reads this file to decide how to show the app and how to start it.
+# Nothing else about the app has to change: it stays its own repository, keeps
+# its own release cycle, and still runs standalone with ./run.sh.
+#
+# Full reference: MODULE_CONTRACT.md in the ApexBuild repository.
+
+[module]
+id       = "terminal"
+name     = "Apex Terminal"
+version  = "1.0.0"
+summary  = "Split-pane terminals with broadcast, keep-alive and a connection history."
+icon     = ">_"        # 1-3 characters for the sidebar tile
+accent   = "#b14cff"      # tile colour
+contract = 1
+order    = 30                      # sidebar position; lower sorts first
+
+[run]
+launcher      = "apexmod"           # the uniform launcher, relative to this file
+health        = "/api/health"                 # path ApexBuild polls to decide "it is up"
+ready_timeout = 30                  # seconds to wait for that before giving up
+embeddable    = true                # false -> opened in its own window instead
+
+[sync]
+# Extra paths `apex sync` should never copy between this repo and ApexBuild.
+# The usual suspects (.git, .venv, __pycache__, dist, build) are always skipped.
+# The history file holds command lines and lives in the data
+# directory, never in the checkout -- but exclude it anyway in case
+# somebody runs with --data-dir .
+exclude = ["history.json", "*.db"]

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="neon">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apex Terminal</title>
+<link rel="stylesheet" href="vendor/xterm/xterm.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="glow-field" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="3" y="5" width="26" height="22" rx="3" fill="none"
+            stroke="currentColor" stroke-width="1.6"/>
+      <path d="M9 12l4 4-4 4M16 20h7" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="brand-text">
+      <strong>TERMINAL</strong>
+      <span id="paneCount">no panes</span>
+    </div>
+  </div>
+
+  <div class="bar-tools">
+    <button class="btn" id="btnNew" title="New pane (Ctrl+Shift+Enter)">+ Pane</button>
+    <div class="seg" role="group" aria-label="Split the focused pane">
+      <button id="btnSplitV" title="Split left / right (Ctrl+Shift+D)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>
+        Vertical
+      </button>
+      <button id="btnSplitH" title="Split top / bottom (Ctrl+Shift+E)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 8h13" stroke="currentColor" stroke-width="1.4"/></svg>
+        Horizontal
+      </button>
+    </div>
+
+    <button class="btn sync" id="btnSync" aria-pressed="false"
+            title="Type into every pane at once (Ctrl+Shift+S)">
+      <span class="dot" aria-hidden="true"></span> Broadcast
+    </button>
+
+    <label class="field-inline" title="Write a harmless byte to an idle session so the far end does not time you out">
+      <span>Anti-idle</span>
+      <select id="selIdle">
+        <option value="0">off</option>
+        <option value="30">30s</option>
+        <option value="60">60s</option>
+        <option value="120">2m</option>
+        <option value="300">5m</option>
+      </select>
+    </label>
+
+    <button class="icon-btn" id="btnHistory" title="Connections and history (Ctrl+Shift+H)">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.4V8l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+    </button>
+    <div class="conn off" id="connDot" title="Link to the backend"><i></i><span id="connText">…</span></div>
+  </div>
+</header>
+
+<!-- One command, every pane. Separate from broadcast-typing on purpose: this
+     is the deliberate one-shot, that is the sustained mode. -->
+<div class="sendbar" id="sendBar" hidden>
+  <span class="sendbar-label">send to all</span>
+  <input id="sendAll" type="text" autocomplete="off" spellcheck="false"
+         placeholder="command — Enter sends it to every pane">
+  <button class="btn sm" id="btnSendAll">Send</button>
+  <button class="icon-btn sm" id="btnCloseSend" title="Hide">×</button>
+</div>
+
+<main id="stage">
+  <div id="layout" class="layout"></div>
+  <div class="empty" id="emptyState">
+    <p><b>No panes open.</b></p>
+    <p>Open one with <b>+ Pane</b>, or pick a saved connection from the
+       history drawer. Split it with <b>Ctrl+Shift+D</b> and
+       <b>Ctrl+Shift+E</b>; turn on <b>Broadcast</b> to type into every pane at
+       once.</p>
+    <button class="btn primary" id="btnFirst">Open a terminal</button>
+  </div>
+  <div class="unsupported" id="unsupported" hidden></div>
+</main>
+
+<!-- History drawer -->
+<div class="drawer-scrim" id="drawerScrim" hidden></div>
+<aside class="drawer" id="drawer" hidden>
+  <div class="drawer-head">
+    <div>
+      <h2>Connections</h2>
+      <p>Everything opened here, newest first. Saved ones stay at the top.</p>
+    </div>
+    <button class="icon-btn" id="btnDrawerClose" title="Close">×</button>
+  </div>
+  <div class="drawer-tabs">
+    <button class="on" data-tab="saved">Saved</button>
+    <button data-tab="history">History</button>
+    <button data-tab="live">Running</button>
+  </div>
+  <div class="drawer-body">
+    <div class="launcher">
+      <input id="newCommand" type="text" autocomplete="off" spellcheck="false"
+             placeholder="ssh user@host  —  blank for a shell">
+      <button class="btn primary sm" id="btnLaunch">Open</button>
+      <button class="btn sm" id="btnSave" title="Keep this command under a name">Save</button>
+    </div>
+    <div id="drawerList"></div>
+  </div>
+</aside>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script src="vendor/xterm/xterm.min.js"></script>
+<script src="vendor/xterm/xterm-addon-fit.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
