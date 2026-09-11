@@ -487,17 +487,106 @@ function setConn(up) {
   $("#connText").textContent = up ? "live" : "reattaching";
 }
 
+/* ------------------------------------------------------ the colour legend */
+
+/* The 16 ANSI slots, from the same theme the terminals are built with, so a
+   swatch here is the colour a pane actually paints. */
+const ANSI = [
+  XTERM_THEME.black, XTERM_THEME.red, XTERM_THEME.green, XTERM_THEME.yellow,
+  XTERM_THEME.blue, XTERM_THEME.magenta, XTERM_THEME.cyan, XTERM_THEME.white,
+  XTERM_THEME.brightBlack, XTERM_THEME.brightRed, XTERM_THEME.brightGreen,
+  XTERM_THEME.brightYellow, XTERM_THEME.brightBlue, XTERM_THEME.brightMagenta,
+  XTERM_THEME.brightCyan, XTERM_THEME.brightWhite,
+];
+
+/* Turn an SGR sequence such as "01;34;46" into inline style. Only the subset a
+   file-colour scheme uses: bold, underline, the 8 foreground and 8 background
+   colours, and their bright forms. Anything else is ignored rather than
+   guessed at. */
+function sgrToStyle(sgr) {
+  const style = {};
+  let bold = false;
+  for (const part of String(sgr).split(";")) {
+    const n = parseInt(part, 10);
+    if (Number.isNaN(n)) continue;
+    if (n === 0) { style.color = XTERM_THEME.foreground; }
+    else if (n === 1) { bold = true; style.fontWeight = "700"; }
+    else if (n === 4) style.textDecoration = "underline";
+    else if (n >= 30 && n <= 37) style.color = ANSI[n - 30];
+    else if (n >= 90 && n <= 97) style.color = ANSI[n - 90 + 8];
+    else if (n >= 40 && n <= 47) style.background = ANSI[n - 40];
+    else if (n >= 100 && n <= 107) style.background = ANSI[n - 100 + 8];
+  }
+  // Bold picks the bright variant, which is what a terminal does and what
+  // makes "01;36" read as the cyan a directory is actually drawn in.
+  if (bold && style.color) {
+    const i = ANSI.indexOf(style.color);
+    if (i >= 0 && i < 8) style.color = ANSI[i + 8];
+  }
+  return style;
+}
+
+const SAMPLE = {
+  "Directory": "src/", "Symlink": "current -> v2", "Broken symlink": "gone -> ?",
+  "Executable": "deploy.sh", "Regular file": "notes", "Hidden (ll / la)": ".bashrc",
+  "Archive": "backup.tar.gz", "Image": "diagram.png", "Audio / video": "clip.mp4",
+  "Document": "README.md", "Source code": "server.py", "Config / data": "config.yaml",
+  "Logs, backups, swap": "debug.log", "Device / socket / fifo": "docker.sock",
+  "setuid / setgid": "passwd", "World-writable dir": "tmp/",
+};
+
+async function renderColors(host) {
+  let data;
+  try {
+    data = await api("/api/colors");
+  } catch (e) {
+    host.append(el("p", { class: "hint", text: "Could not load: " + e.message }));
+    return;
+  }
+  const grid = el("div", { class: "legend" });
+  for (const { label, sgr } of data.legend || []) {
+    grid.append(el("div", { class: "legend-row" },
+      el("span", { class: "legend-sample", style: sgrToStyle(sgr),
+                   text: SAMPLE[label] || label }),
+      el("span", { class: "legend-sgr", text: label })));
+  }
+  host.append(grid);
+
+  const shims = Object.entries(data.shims || {});
+  host.append(el("p", { class: "hint" },
+    "Colour needs two things, and a plain shell has neither: a scheme in ",
+    el("kbd", {}, "LS_COLORS"), ", and an ", el("kbd", {}, "ls"),
+    " that has been asked to use it. Both are set up for every pane — no alias, ",
+    "no change to your shell config. Your own alias still wins."));
+  if (shims.length) {
+    host.append(el("p", { class: "hint" },
+      "Wrappers on PATH in this pane:",
+      el("br"),
+      ...shims.map(([name, what]) => el("span", {},
+        el("kbd", {}, name), " → " + what, el("br")))));
+  }
+  host.append(el("p", { class: "hint" },
+    el("b", {}, "About hidden files: "),
+    "GNU ls cannot colour them. Its scheme takes two-letter type codes and ",
+    el("kbd", {}, "*suffix"),
+    " patterns only — a leading-dot glob is rejected outright. ",
+    shims.some(([n]) => n === "la")
+      ? "eza does accept one, so ll and la dim them; plain ls cannot."
+      : "Install eza and ll/la will dim them; plain ls cannot."));
+}
+
 /* ------------------------------------------------------------------ drawer */
 
 function openDrawer(tab) {
   if (tab) state.drawerTab = tab;
   $("#drawer").hidden = false;
   $("#drawerScrim").hidden = false;
+  $(".launcher").hidden = state.drawerTab === "colors";
   for (const b of document.querySelectorAll(".drawer-tabs button")) {
     b.classList.toggle("on", b.dataset.tab === state.drawerTab);
   }
   refreshDrawer();
-  $("#newCommand").focus();
+  if (state.drawerTab !== "colors") $("#newCommand").focus();
 }
 
 function closeDrawer() {
@@ -515,7 +604,10 @@ const ago = (ts) => {
 
 async function refreshDrawer() {
   if ($("#drawer").hidden) return;
+  // The legend never changes; redrawing it on the poll would fight the reader.
+  if (state.drawerTab === "colors" && $("#drawerList").querySelector(".legend")) return;
   const host = clear($("#drawerList"));
+  if (state.drawerTab === "colors") return renderColors(host);
   let data;
   try {
     data = state.drawerTab === "live"

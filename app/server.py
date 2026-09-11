@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import pty_session                              # noqa: E402
+from app import pty_session, shell_env                   # noqa: E402
 from app.history import History                          # noqa: E402
 from app.websocket import WebSocket, WebSocketClosed, is_upgrade  # noqa: E402
 
@@ -55,6 +55,7 @@ LOOPBACK_ORIGIN = re.compile(r"^http://(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$
 
 REGISTRY = pty_session.Registry()
 HISTORY = None          # set in serve()
+SHIMS = {}              # set in serve(): which wrapper commands exist
 EMBED_ORIGIN = ""
 
 
@@ -179,6 +180,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "sessions": REGISTRY.list()})
         if path == "/api/history":
             return self._json({"ok": True, **HISTORY.snapshot()})
+        if path == "/api/colors":
+            return self._json({"ok": True,
+                               "legend": [{"label": l, "sgr": c} for l, c in shell_env.LEGEND],
+                               "shims": SHIMS})
         return self._static(path)
 
     def do_HEAD(self):
@@ -396,6 +401,13 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
         os.makedirs(data_dir, exist_ok=True)
     HISTORY = History(os.path.join(data_dir, "history.json"))
 
+    # Colour. A pane is monochrome without both halves of this: a scheme in
+    # LS_COLORS, and an `ls` that has been asked to use it. See shell_env.py.
+    global SHIMS
+    SHIMS = shell_env.build_shims(os.path.join(data_dir, "bin"))
+    shims = SHIMS
+    pty_session.set_shell_extras(shell_env.environment(os.path.join(data_dir, "bin")))
+
     if embed_origin and not set_embed_origin(embed_origin):
         log("WARN", f"ignoring --embed-origin {embed_origin!r}: only a loopback "
                     "http origin such as http://127.0.0.1:8800 is accepted")
@@ -407,6 +419,10 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
 
     log("INFO", f"{APP_NAME} on {url}")
     log("INFO", f"history: {HISTORY.path}")
+    if shims:
+        log("INFO", "colour: " + ", ".join(f"{k} -> {v}" for k, v in shims.items()))
+    else:
+        log("WARN", "no ls found; listings will not be coloured")
     if EMBED_ORIGIN:
         log("INFO", f"embedded: {EMBED_ORIGIN} may frame this app")
     if not pty_session.supported():

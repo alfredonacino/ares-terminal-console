@@ -382,3 +382,17 @@ kbd {
     transition-duration: .001ms !important;
   }
 }
+
+/* ---------- colour legend ---------------------------------------------- */
+
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
+.legend-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft); background: rgba(4, 5, 11, .7);
+}
+/* The swatch is the real thing: a sample rendered with the same SGR the shell
+   emits, so the legend cannot claim a colour the terminal does not produce. */
+.legend-sample { font-size: 11.5px; flex: 1 1 auto; overflow: hidden;
+                 text-overflow: ellipsis; white-space: nowrap; }
+.legend-sgr { font-size: 9px; color: var(--ink-faint); flex: 0 0 auto; }

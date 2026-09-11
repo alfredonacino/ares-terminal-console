@@ -49,6 +49,17 @@ COALESCE_S = 0.012
 
 DEFAULT_SHELL = os.environ.get("SHELL") or "/bin/bash"
 
+# Filled in by set_shell_extras() at startup: the colour scheme and the wrapper
+# commands that make a listing readable. Empty until then, so a Session created
+# before the app has configured itself simply gets a plain shell.
+SHELL_EXTRAS: dict = {}
+
+
+def set_shell_extras(env: dict) -> None:
+    """Environment every session inherits on top of the process's own."""
+    global SHELL_EXTRAS
+    SHELL_EXTRAS = dict(env or {})
+
 
 def supported() -> bool:
     return POSIX_PTY
@@ -100,6 +111,9 @@ class Session:
 
         argv = shlex.split(self.command) if self.command.strip() else [DEFAULT_SHELL]
         env = dict(os.environ)
+        # Colour scheme and the ls/ll/la wrappers first, so a caller's own
+        # env still overrides them.
+        env.update(SHELL_EXTRAS)
         env.update(extra_env)
         # xterm.js speaks xterm-256color; telling the child anything else means
         # colours and key sequences that do not match what the browser renders.

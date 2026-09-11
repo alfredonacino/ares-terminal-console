@@ -39,6 +39,22 @@ interval you pick. Shells discard it; the far end sees traffic and does not time
 you out. It is off by default and the pane says so while it is on — it is still
 a write into somebody's shell.
 
+**Colour, without touching your shell config.** A listing is monochrome unless
+two things are true, and in a plain shell neither is: `LS_COLORS` has to say
+what each kind of file looks like, and `ls` has to be *asked* to colour with
+`--color=auto`, which normally comes from an alias you may not have. Both are
+set up for every pane — a palette matched to the suite's theme, and `ls`/`ll`/
+`la`/`lt` wrappers placed first on `PATH`. Wrappers rather than aliases because
+an alias would have to be injected into bash, zsh and fish separately, and
+editing somebody's rc files to get colour is not a trade worth making. Your own
+alias still wins, since aliases resolve before `PATH`. The **Colours** tab in
+the drawer is the legend, rendered with the real escape sequences.
+
+One honest limit: **GNU `ls` cannot colour hidden files.** Its scheme takes
+two-letter type codes and `*suffix` patterns only — a leading-dot glob is
+rejected outright. `eza` does accept one, so where it is installed `ll` and
+`la` dim dotfiles; plain `ls` cannot, and no scheme changes that.
+
 **History.** Everything opened here is recorded with when it started, when it
 ended and how. Name one and it moves to **Saved**. Passwords are blanked before
 anything reaches the disk — `--password`, `--token`, `sshpass -p`, credentials
@@ -105,5 +121,6 @@ apex-terminal/
     ├── websocket.py     RFC 6455 framing, and the keep-alive ping
     ├── pty_session.py   PTYs, the scrollback ring, the session registry
     ├── history.py       history, saved connections, redaction
+    ├── shell_env.py     the colour scheme and the ls/ll/la wrappers
     └── static/          the UI (xterm.js vendored, no CDN)
 ```
