@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import pty_session, shell_env                   # noqa: E402
+from app import pty_session, shell_env, sso              # noqa: E402
 from app.history import History                          # noqa: E402
 from app.websocket import WebSocket, WebSocketClosed, is_upgrade  # noqa: E402
 
@@ -52,6 +52,13 @@ AUTHOR = "Alfredo Nacino"
 # string -- means a stray environment variable cannot turn the app into
 # something any website may frame.
 LOOPBACK_ORIGIN = re.compile(r"^http://(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$")
+
+# Set in serve() when the suite started us; None when we were run alone, in
+# which case there is nobody to trust and no ticket is accepted.
+SSO = None
+# Who the shell says is using this. Displayed, and written into the history so
+# an audit of what was run has a name against it.
+SSO_USER = {}
 
 REGISTRY = pty_session.Registry()
 HISTORY = None          # set in serve()
@@ -165,13 +172,48 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------- verbs
 
+    def _accept_sso(self, path: str):
+        """Take the identity out of a ticket, then get it out of the URL.
+
+        The redirect matters as much as the check: a ticket left in the address
+        bar is in the history, in a screenshot and in anything that logs a
+        referrer. It is single-use anyway, but the tidy thing is for it to
+        exist for exactly one request.
+        """
+        global SSO_USER
+        ticket = self._q1(sso.QUERY_PARAM)
+        if not ticket or SSO is None:
+            return False
+        try:
+            payload = SSO.verify(ticket)
+        except ValueError as e:
+            log("WARN", f"refused a single sign-on ticket: {e}")
+            return False
+        SSO_USER = {"username": payload["sub"], "name": payload.get("name", ""),
+                    "role": payload.get("role", "user")}
+        log("INFO", f"single sign-on: {payload['sub']} ({payload.get('role')})")
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        query.pop(sso.QUERY_PARAM, None)
+        rest = urllib.parse.urlencode(query, doseq=True)
+        self.send_response(303)
+        self.send_header("Location", path + (("?" + rest) if rest else ""))
+        self.send_header("Content-Length", "0")
+        for k, v in security_headers().items():
+            self.send_header(k, v)
+        self.end_headers()
+        return True
+
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
+
+        if self._q1(sso.QUERY_PARAM) and self._accept_sso(path):
+            return
 
         if path == "/ws":
             return self._websocket()
         if path == "/api/health":
             return self._json({"ok": True, "app": APP_NAME,
+                               "user": SSO_USER or None,
                                "embedded": bool(EMBED_ORIGIN),
                                "supported": pty_session.supported(),
                                "reason": pty_session.unsupported_reason(),
@@ -407,6 +449,12 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
     SHIMS = shell_env.build_shims(os.path.join(data_dir, "bin"))
     shims = SHIMS
     pty_session.set_shell_extras(shell_env.environment(os.path.join(data_dir, "bin")))
+
+    global SSO
+    SSO = sso.from_environment("terminal")
+    if SSO:
+        log("INFO", "single sign-on enabled; tickets from the ApexBuild shell "
+                    "will be accepted")
 
     if embed_origin and not set_embed_origin(embed_origin):
         log("WARN", f"ignoring --embed-origin {embed_origin!r}: only a loopback "
