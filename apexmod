@@ -120,7 +120,10 @@ def cmd_run(args) -> int:
         # Set when ApexBuild is framing this app; see docs/EMBEDDING.md. When
         # it is empty the app is standalone and refuses framing entirely.
         embed_origin=args.embed_origin or os.environ.get("APEX_EMBED_ORIGIN") or "",
-        open_browser=not args.no_open,
+        # Two independent reasons not to open a browser: the flag, and
+        # simply being hosted. The flag alone was not enough -- a host that
+        # forgets it left this app opening a tab beside the suite's own frame.
+        open_browser=not (args.no_open or os.environ.get("APEX_HOST")),
     )
 
 
