@@ -577,6 +577,43 @@ async function renderColors(host) {
 
 /* ------------------------------------------------------------------ drawer */
 
+/* ------------------------------------------------------------- help & about */
+
+async function openHelp() {
+  $("#helpWrap").hidden = false;
+  $("#btnHelpClose").focus();
+  const box = $("#helpAbout");
+  box.textContent = "Reading…";
+  let health;
+  try {
+    health = await api("/api/health");
+  } catch (err) {
+    box.textContent = `Could not reach the backend — ${err.message}`;
+    return;
+  }
+  const rows = [
+    ["version", health.version || "—"],
+    ["terminals", health.supported ? "supported on this machine"
+                                   : (health.reason || "not available here")],
+    ["live sessions", String(health.sessions ?? 0)],
+    ["running", health.embedded ? "inside ApexBuild" : "on its own"],
+    ["signed in as", health.user || "nobody — no ApexBuild sign-on"],
+    ["author", "Alfredo Nacino"],
+  ];
+  box.textContent = "";
+  for (const [key, value] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = key;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    box.append(dt, dd);
+  }
+}
+
+function closeHelp() {
+  $("#helpWrap").hidden = true;
+}
+
 function openDrawer(tab) {
   if (tab) state.drawerTab = tab;
   $("#drawer").hidden = false;
@@ -708,6 +745,14 @@ function attachExisting(info) {
 /* -------------------------------------------------------------------- wire */
 
 function wire() {
+  // F1 and Escape are handled here rather than in the pane's own key handler:
+  // a terminal is entitled to every other key on the keyboard, and help that
+  // could not be closed without the mouse would be a poor kind of help.
+  addEventListener("keydown", (e) => {
+    if (e.key === "F1") { e.preventDefault(); openHelp(); return; }
+    if (e.key === "Escape" && !$("#helpWrap").hidden) { e.preventDefault(); closeHelp(); }
+  }, true);
+
   $("#btnNew").onclick = () => openPane({});
   $("#btnFirst").onclick = () => openPane({});
   $("#btnSplitV").onclick = () => splitPane(state.focus, "v");
@@ -715,6 +760,9 @@ function wire() {
   $("#btnSync").onclick = () => setSync(!state.sync);
   $("#selIdle").onchange = (e) => setAntiIdle(e.target.value);
   $("#btnHistory").onclick = () => ($("#drawer").hidden ? openDrawer() : closeDrawer());
+  $("#btnHelp").onclick = () => ($("#helpWrap").hidden ? openHelp() : closeHelp());
+  $("#btnHelpClose").onclick = closeHelp;
+  $("#helpWrap").onclick = (e) => { if (e.target.id === "helpWrap") closeHelp(); };
   $("#btnDrawerClose").onclick = closeDrawer;
   $("#drawerScrim").onclick = closeDrawer;
   $("#btnCloseSend").onclick = () => setSync(false);

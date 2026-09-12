@@ -23,6 +23,7 @@ origin the host passes in. See docs/EMBEDDING.md in the ApexBuild repository.
 import json
 import mimetypes
 import os
+import pathlib
 import re
 import signal
 import socket
@@ -45,6 +46,27 @@ ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 
 APP_NAME = "Apex Terminal"
+
+
+def _manifest_version(default: str = "0.0.0") -> str:
+    """The version out of apexmodule.toml.
+
+    Read rather than repeated, so the number the About box shows and the number
+    ApexBuild lists in its sidebar cannot disagree -- there is one place to
+    change it. tomllib is standard library from 3.11, which is the floor this
+    app already stands on, so this adds no dependency.
+    """
+    try:
+        import tomllib
+        path = pathlib.Path(__file__).resolve().parent.parent / "apexmodule.toml"
+        with path.open("rb") as fh:
+            return str(tomllib.load(fh)["module"]["version"])
+    except Exception:
+        # A packaged build with no manifest beside it still has to start.
+        return default
+
+
+APP_VERSION = _manifest_version()
 AUTHOR = "Alfredo Nacino"
 
 # An embed origin is only ever a loopback HTTP origin handed over by the host
@@ -213,10 +235,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._websocket()
         if path == "/api/health":
             return self._json({"ok": True, "app": APP_NAME,
+                               "version": APP_VERSION,
                                "user": SSO_USER or None,
                                "embedded": bool(EMBED_ORIGIN),
                                "supported": pty_session.supported(),
                                "reason": pty_session.unsupported_reason(),
+                               "sessions": len(REGISTRY.list()),
                                "time": now_iso()})
         if path == "/api/sessions":
             return self._json({"ok": True, "sessions": REGISTRY.list()})

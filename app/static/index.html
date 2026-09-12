@@ -53,6 +53,9 @@
       </select>
     </label>
 
+    <button class="icon-btn" id="btnHelp" title="Help and about (F1)">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.3 6.2a1.75 1.75 0 1 1 2.4 1.62c-.45.2-.7.5-.7 1.02v.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.4" r=".85" fill="currentColor"/></svg>
+    </button>
     <button class="icon-btn" id="btnHistory" title="Connections and history (Ctrl+Shift+H)">
       <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.4V8l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
     </button>
@@ -115,5 +118,98 @@
 <script src="vendor/xterm/xterm.min.js"></script>
 <script src="vendor/xterm/xterm-addon-fit.min.js"></script>
 <script src="app.js"></script>
+
+<!-- Help and about. A sheet rather than a drawer: it is read once and closed,
+     it does not need to sit beside a working pane, and Esc should end it. -->
+<div class="sheet-wrap" id="helpWrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <header class="sheet-head">
+      <h2 id="helpTitle">Apex Terminal</h2>
+      <button class="icon-btn" id="btnHelpClose" title="Close (Esc)">&times;</button>
+    </header>
+
+    <div class="sheet-body">
+      <p class="sheet-lede">Split-pane terminals in a browser tab, with
+         broadcast, keep-alive and a connection history. Python 3.11 and nothing
+         else &mdash; a terminal is what you reach for when a machine is already
+         in a bad way, and &ldquo;install this first&rdquo; is the wrong answer
+         at that moment.</p>
+
+      <section>
+        <h3>Keyboard</h3>
+        <dl class="keys">
+          <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Enter</kbd></dt>
+          <dd>New pane.</dd>
+          <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></dt>
+          <dd>Split the focused pane left / right.</dd>
+          <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd></dt>
+          <dd>Split it top / bottom.</dd>
+          <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>W</kbd></dt>
+          <dd>Close the focused pane.</dd>
+          <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd></dt>
+          <dd>Broadcast &mdash; type into every pane at once.</dd>
+          <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>H</kbd></dt>
+          <dd>Connections and history.</dd>
+          <dt><kbd>F1</kbd></dt>
+          <dd>This panel &mdash; or the <b>?</b> button, since some browsers
+              keep F1 for themselves. <kbd>Esc</kbd> closes it.</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Panes and splits</h3>
+        <p>The layout is a binary tree, so closing a pane collapses its parent
+           back into its sibling instead of leaving a hole. Drag any divider to
+           re-balance.</p>
+      </section>
+
+      <section>
+        <h3>Broadcast, and send to all</h3>
+        <p>Broadcast sends every keystroke to every pane &mdash; tmux's
+           <code>synchronize-panes</code>. The chrome turns amber and
+           <b>stays</b> amber, because forgetting it is on is how you run a
+           command on nine machines you meant to run on one.</p>
+        <p><b>Send</b> beside it is the deliberate one-shot: type a line, press
+           Enter, it lands in every pane.</p>
+      </section>
+
+      <section>
+        <h3>Sessions outlive their socket</h3>
+        <p>Close the tab, lose wifi, suspend the laptop &mdash; the command keeps
+           running. Reopening replays the scrollback and carries on. The
+           <b>Running</b> tab attaches a session no pane is currently showing.</p>
+      </section>
+
+      <section>
+        <h3>Keep-alive, at two levels</h3>
+        <p>The server pings every idle socket every 20 seconds, which stops a
+           proxy or a power manager deciding the <i>browser</i> link is dead.</p>
+        <p><b>Anti-idle</b> is the other half: it writes a NUL byte into any
+           session quiet for the interval you pick, so the far end sees traffic
+           and does not time you out. Shells discard it. It is off by default and
+           the pane says so while it is on &mdash; it is still a write into
+           somebody else's shell.</p>
+      </section>
+
+      <section>
+        <h3>Inside ApexBuild, and the trust boundary</h3>
+        <p>Started by the suite, this takes the ApexBuild sign-on, so it knows
+           who is using it without asking for a second password. Run on its own
+           it behaves exactly as it always has.</p>
+        <p><b>That is identity, not a lock.</b> This app binds loopback and has
+           no authentication of its own: anything that can reach the port can
+           open a shell as you. The WebSocket checks <code>Origin</code>, because
+           browsers do not apply CORS to WebSocket handshakes and without it any
+           page on the internet could open one. Keep it on 127.0.0.1; if it has
+           to go further, put something that authenticates in front.</p>
+      </section>
+
+      <section>
+        <h3>About</h3>
+        <dl class="about-list" id="helpAbout"></dl>
+      </section>
+    </div>
+  </div>
+</div>
 </body>
 </html>
