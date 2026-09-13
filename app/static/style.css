@@ -462,3 +462,97 @@ kbd {
   margin: 0; font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #cfe3f6; word-break: break-word;
 }
+
+/* ---------- the ask bar ------------------------------------------------ */
+
+/* Violet, which is this module's accent colour in the suite sidebar: the bar
+   is part of the terminal rather than a guest in it. Sits below the stage as
+   a flex row of its own, so it takes only the height it needs and the panes
+   keep the rest. */
+.askbar {
+  position: relative; z-index: 25; flex: 0 0 auto;
+  max-height: 42vh; overflow-y: auto;
+  padding: 8px 12px;
+  background: linear-gradient(0deg, rgba(177, 76, 255, .10), rgba(7, 10, 19, .92));
+  border-top: 1px solid color-mix(in srgb, var(--violet) 42%, var(--line));
+  box-shadow: 0 0 30px -14px var(--violet);
+}
+.ask-row { display: flex; align-items: center; gap: 8px; }
+.ask-label {
+  flex: 0 0 auto; font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--violet); text-shadow: 0 0 10px var(--violet);
+}
+.askbar input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 5px 9px; border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--violet) 38%, var(--line));
+  background: rgba(4, 5, 11, .8); color: var(--ink); font: inherit; font-size: 12px;
+}
+.askbar input:focus { outline: none; border-color: var(--violet);
+                      box-shadow: 0 0 16px -5px var(--violet); }
+.askbar input:disabled { opacity: .55; }
+
+.ask-answer { margin-top: 9px; font-size: 12px; line-height: 1.62; }
+.ask-text { color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; }
+.ask-text code {
+  padding: 0 4px; border-radius: 3px;
+  background: rgba(177, 76, 255, .13); color: var(--ink);
+}
+
+/* One proposed command. The whole row is the insert button, and the label says
+   "insert" rather than "run" because that is precisely what it does. */
+.ask-cmds { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; }
+.ask-cmd {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--violet) 34%, var(--line));
+  background: rgba(4, 5, 11, .72); color: var(--ink);
+  font: inherit; font-size: 12px; text-align: left;
+}
+.ask-cmd:hover { border-color: var(--violet); background: rgba(177, 76, 255, .12); }
+.ask-cmd code { flex: 1 1 auto; min-width: 0; background: none; border: 0;
+                color: var(--lime); word-break: break-all; }
+.ask-cmd .insert {
+  flex: 0 0 auto; font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--violet);
+}
+
+.ask-meta { margin-top: 8px; font-size: 10px; color: var(--ink-faint); }
+.ask-meta b { color: var(--ink-dim); font-weight: 600; }
+.ask-unavailable {
+  margin: 9px 0 0; font-size: 10.5px; line-height: 1.6; color: var(--amber);
+}
+
+/* ---------- the cost sheet --------------------------------------------- */
+
+.cost-top { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.cost-tile {
+  flex: 1 1 96px; padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: rgba(4, 5, 11, .55);
+}
+.cost-tile .k { font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+                color: var(--ink-faint); }
+.cost-tile .v { margin-top: 4px; font-size: 17px; color: var(--ink); }
+.cost-tile.spend .v { color: var(--lime); text-shadow: 0 0 14px rgba(57, 255, 136, .4); }
+
+.cost-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.cost-table th {
+  text-align: left; padding: 5px 8px; font-weight: 500;
+  font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint); border-bottom: 1px solid var(--line);
+}
+.cost-table td { padding: 5px 8px; border-bottom: 1px solid var(--line-soft);
+                 color: var(--ink-dim); vertical-align: top; }
+.cost-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.cost-table td.ask { color: var(--ink); word-break: break-word; }
+
+/* The per-day series, drawn as bars rather than a chart: it is one number a
+   day over thirty days, and a charting library for that would be absurd. */
+.cost-bars { display: flex; align-items: flex-end; gap: 3px; height: 64px;
+             margin: 4px 0 16px; }
+/* max-width so a single day's bar is a bar, not a banner across the panel. */
+.cost-bar { flex: 1 1 0; min-width: 3px; max-width: 34px; border-radius: 2px 2px 0 0;
+            background: linear-gradient(180deg, var(--violet), rgba(177, 76, 255, .25));
+            min-height: 2px; }
+.cost-note { font-size: 10px; color: var(--ink-faint); margin: 0 0 14px; }
+.cost-est { color: var(--amber); }

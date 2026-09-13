@@ -1,0 +1,11 @@
+# Apex Terminal runs on the standard library alone. This file is the one
+# exception, and it buys exactly one optional feature: the "ask" bar under the
+# terminal (app/agent.py).
+#
+# The import is lazy and every failure to find it is reported to the UI as
+# "unavailable". A terminal has to open a PTY on a machine with no SDK, no
+# Node and no network -- that is the situation people open a terminal *for* --
+# so nothing here is allowed to become a condition of starting.
+#
+# `apex setup terminal` installs this into the module's own .venv.
+claude-agent-sdk>=0.2.152

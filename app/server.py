@@ -38,7 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import pty_session, shell_env, sso              # noqa: E402
+from app import agent, pty_session, shell_env, sso       # noqa: E402
 from app.history import History                          # noqa: E402
 from app.websocket import WebSocket, WebSocketClosed, is_upgrade  # noqa: E402
 
@@ -78,6 +78,9 @@ LOOPBACK_ORIGIN = re.compile(r"^http://(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$
 # Set in serve() when the suite started us; None when we were run alone, in
 # which case there is nobody to trust and no ticket is accepted.
 SSO = None
+
+# What every agent ask cost. Set in serve(), beside the history file.
+LEDGER = None
 # Who the shell says is using this. Displayed, and written into the history so
 # an audit of what was run has a name against it.
 SSO_USER = {}
@@ -250,6 +253,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True,
                                "legend": [{"label": l, "sgr": c} for l, c in shell_env.LEGEND],
                                "shims": SHIMS})
+        if path == "/api/agent/state":
+            # Asked on every page load, so it must be cheap and must never
+            # raise: the answer "no" is what draws the bar as unavailable.
+            return self._json({"ok": True, **agent.state()})
+        if path == "/api/agent/costs":
+            return self._json({"ok": True, **LEDGER.analysis()})
         return self._static(path)
 
     def do_HEAD(self):
@@ -298,6 +307,28 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/history/clear":
             HISTORY.clear()
             return self._json({"ok": True})
+
+        if path == "/api/agent/ask":
+            prompt = str(body.get("prompt") or "")
+            result = agent.ask(prompt,
+                               cwd=str(body.get("cwd") or ""),
+                               model=str(body.get("model") or ""))
+            # Recorded whichever way it went. An ask that failed after the
+            # model had already run still cost something, and a ledger that
+            # only counts successes understates the bill.
+            usage = result.get("usage") or {}
+            if usage:
+                LEDGER.record(prompt, usage, ok=result.get("ok", False))
+            if result.get("ok"):
+                log("INFO", f"agent ask ({usage.get('duration_ms', '?')}ms, "
+                            f"${usage.get('cost') or 0:.4f}): {prompt[:60]}")
+            else:
+                log("WARN", f"agent ask failed: {result.get('error', '')[:120]}")
+            return self._json(result, status=200 if result.get("ok") else 400)
+
+        if path == "/api/agent/costs/clear":
+            LEDGER.clear()
+            return self._json({"ok": True, **LEDGER.analysis()})
 
         return self._json({"ok": False, "error": "unknown endpoint"}, status=404)
 
@@ -456,7 +487,7 @@ def _reaper():
 def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
           embed_origin: str = "", open_browser: bool = False) -> int:
     """Start the app and block until told to stop."""
-    global HISTORY
+    global HISTORY, LEDGER
 
     if data_dir:
         os.makedirs(data_dir, exist_ok=True)
@@ -466,6 +497,7 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
             "apex-terminal")
         os.makedirs(data_dir, exist_ok=True)
     HISTORY = History(os.path.join(data_dir, "history.json"))
+    LEDGER = agent.Ledger(os.path.join(data_dir, "agent-costs.json"))
 
     # Colour. A pane is monochrome without both halves of this: a scheme in
     # LS_COLORS, and an `ls` that has been asked to use it. See shell_env.py.

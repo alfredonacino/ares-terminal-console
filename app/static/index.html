@@ -53,6 +53,8 @@
       </select>
     </label>
 
+    <button class="btn" id="btnAskBar" aria-pressed="false"
+            title="Ask about a command (Ctrl+Shift+A)">ask</button>
     <button class="icon-btn" id="btnHelp" title="Help and about (F1)">
       <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.3 6.2a1.75 1.75 0 1 1 2.4 1.62c-.45.2-.7.5-.7 1.02v.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.4" r=".85" fill="currentColor"/></svg>
     </button>
@@ -86,6 +88,31 @@
   <div class="unsupported" id="unsupported" hidden></div>
 </main>
 
+<!-- The ask bar. Below the terminal on purpose: it is a thing you consult
+     while working in a pane, not a mode you switch into. It proposes commands
+     and never runs them -- inserting one is a separate click, and it lands in
+     the pane unsent so it can be read and edited before Enter. -->
+<section class="askbar" id="askBar" hidden>
+  <div class="ask-row">
+    <span class="ask-label" title="Claude Agent SDK">ask</span>
+    <input id="askInput" type="text" autocomplete="off" spellcheck="false"
+           placeholder="how do I find what is listening on port 8443?">
+    <button class="btn sm primary" id="btnAsk">Ask</button>
+    <button class="icon-btn sm" id="btnAskCost" title="What this has cost">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v14M11 4.2C10.3 3.4 9.2 3 8 3 6.3 3 5 3.9 5 5.2 5 8.1 11 7 11 10.2c0 1.4-1.4 2.3-3 2.3-1.3 0-2.4-.4-3.1-1.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="icon-btn sm" id="btnAskClose" title="Hide the ask bar (Ctrl+Shift+A)">&times;</button>
+  </div>
+
+  <div class="ask-answer" id="askAnswer" hidden>
+    <div class="ask-text" id="askText"></div>
+    <div class="ask-cmds" id="askCmds"></div>
+    <div class="ask-meta" id="askMeta"></div>
+  </div>
+
+  <p class="ask-unavailable" id="askUnavailable" hidden></p>
+</section>
+
 <!-- History drawer -->
 <div class="drawer-scrim" id="drawerScrim" hidden></div>
 <aside class="drawer" id="drawer" hidden>
@@ -113,6 +140,18 @@
   </div>
 </aside>
 
+<!-- Cost analysis. Every number here came from the SDK's own ResultMessage,
+     not from a price table, except where a row is marked estimated. -->
+<div class="sheet-wrap" id="costWrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="costTitle">
+    <header class="sheet-head">
+      <h2 id="costTitle">What the assistant has cost</h2>
+      <button class="icon-btn" id="btnCostClose" title="Close (Esc)">&times;</button>
+    </header>
+    <div class="sheet-body" id="costBody"></div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
 
@@ -135,6 +174,7 @@
       <section>
         <h3>Keyboard</h3>
         <dl class="keys">
+          <dt>Ctrl+Shift+A</dt><dd>show or hide the ask bar</dd>
           <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Enter</kbd></dt>
           <dd>New pane.</dd>
           <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></dt>
@@ -189,6 +229,28 @@
       </section>
 
       <section>
+        <h3>Asking about a command</h3>
+        <p>The <b>ask</b> bar under the panes puts a question to Claude through
+           the Claude Agent SDK and answers with the command you need, plus a
+           line on what it does. <b>Ctrl+Shift+A</b> shows and hides it.</p>
+        <p><b>It never runs anything.</b> The agent is given no tools and no
+           permission to use any, so there is no path from a sentence you typed
+           to a command this machine executes. Clicking a suggestion
+           <b>inserts</b> it at the prompt of the focused pane, without a
+           newline — you read it, edit it if you want, and press Enter
+           yourself. Broadcast is ignored on insert: one click means one pane.</p>
+        <p>The <b>$</b> button shows what it has cost. Those numbers come from
+           the SDK's own accounting rather than a price list, so they are what
+           was actually billed; a row is marked <i>estimated</i> only when the
+           SDK reported no cost, which is what a Claude subscription session
+           does. Your questions are kept so a cost can be attributed to one.
+           The answers are not: it is a ledger, not a transcript.</p>
+        <p>This is the one optional dependency in the app
+           (<code>claude-agent-sdk</code>, installed by <code>apex setup
+           terminal</code>). Without it the bar says so and everything else
+           works exactly as before — a terminal has to open on a machine with
+           no SDK, no Node and no network, which is usually why you want one.</p>
+
         <h3>Inside ApexBuild, and the trust boundary</h3>
         <p>Started by the suite, this takes the ApexBuild sign-on, so it knows
            who is using it without asking for a second password. Run on its own

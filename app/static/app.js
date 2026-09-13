@@ -744,13 +744,236 @@ function attachExisting(info) {
 
 /* -------------------------------------------------------------------- wire */
 
+
+/* ----------------------------------------------------------------- the ask bar
+
+   A question box under the panes, backed by the Claude Agent SDK (app/agent.py).
+   It answers with commands and never runs one: `insert` writes the text into
+   the focused pane *without* a newline, so the operator reads it, edits it if
+   they want to, and presses Enter themselves.
+
+   Broadcast is deliberately bypassed on insert. Putting a command into every
+   pane at once because a toggle happens to be on is not something anybody
+   would mean by clicking one suggestion.
+*/
+
+const ask = { open: false, busy: false, ready: null };
+
+function setAskOpen(open) {
+  ask.open = open;
+  $("#askBar").hidden = !open;
+  $("#btnAskBar").setAttribute("aria-pressed", open ? "true" : "false");
+  // The bar takes height from the stage, so every pane has to be told its new
+  // size or xterm keeps drawing at the old one and the bottom rows are lost.
+  for (const pane of state.panes.values()) pane.refit();
+  if (open) $("#askInput").focus();
+}
+
+async function loadAskState() {
+  try {
+    ask.ready = await api("/api/agent/state");
+  } catch (_) {
+    ask.ready = { available: false, detail: "The backend did not answer." };
+  }
+  const bad = $("#askUnavailable");
+  const usable = !!(ask.ready && ask.ready.available);
+  bad.hidden = usable;
+  bad.textContent = usable ? "" : (ask.ready.detail || "The assistant is unavailable.");
+  $("#askInput").disabled = !usable;
+  $("#btnAsk").disabled = !usable;
+}
+
+async function doAsk() {
+  if (ask.busy) return;
+  const question = $("#askInput").value.trim();
+  if (!question) return;
+
+  ask.busy = true;
+  $("#btnAsk").disabled = true;
+  $("#askInput").disabled = true;
+  $("#askAnswer").hidden = false;
+  $("#askText").textContent = "Thinking…";
+  $("#askCmds").textContent = "";
+  $("#askMeta").textContent = "";
+
+  try {
+    const pane = state.focus ? state.panes.get(state.focus) : null;
+    const data = await post("/api/agent/ask", {
+      prompt: question,
+      // The focused pane's directory, so "what is in this folder" means the
+      // folder the operator is actually looking at.
+      cwd: (pane && pane.session && pane.session.cwd) || "",
+    });
+    renderAnswer(data);
+  } catch (e) {
+    $("#askText").textContent = e.message;
+    $("#askCmds").textContent = "";
+    $("#askMeta").textContent = "";
+  } finally {
+    ask.busy = false;
+    $("#btnAsk").disabled = false;
+    $("#askInput").disabled = false;
+    $("#askInput").focus();
+  }
+}
+
+function renderAnswer(data) {
+  // The prose, with the fenced blocks stripped out: they are rendered below as
+  // buttons, and leaving them in the text too would say everything twice.
+  const prose = (data.text || "")
+    .replace(/```(?:[\w.+-]*)\n[\s\S]*?```/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  $("#askText").textContent = prose || "(no explanation given)";
+
+  const host = $("#askCmds");
+  host.textContent = "";
+  for (const command of data.commands || []) {
+    const row = document.createElement("button");
+    row.className = "ask-cmd";
+    row.type = "button";
+    row.title = "Put this in the focused pane (it is not run)";
+    const code = document.createElement("code");
+    code.textContent = command;
+    const tag = document.createElement("span");
+    tag.className = "insert";
+    tag.textContent = "insert";
+    row.append(code, tag);
+    row.onclick = () => insertCommand(command);
+    host.append(row);
+  }
+
+  const u = data.usage || {};
+  const bits = [];
+  if (u.cost != null) {
+    bits.push(`<b>$${u.cost.toFixed(4)}</b>${u.estimated ? " (estimated)" : ""}`);
+  }
+  if (u.input != null) bits.push(`${u.input.toLocaleString()} in / ${(u.output || 0).toLocaleString()} out`);
+  if (u.duration_ms != null) bits.push(`${(u.duration_ms / 1000).toFixed(1)}s`);
+  const models = (u.models || []).map((m) => m.model).filter(Boolean);
+  if (models.length) bits.push(models.join(", "));
+  $("#askMeta").innerHTML = bits.join(" &nbsp;·&nbsp; ");
+}
+
+function insertCommand(command) {
+  const pane = state.focus ? state.panes.get(state.focus) : null;
+  if (!pane || pane.dead) {
+    toast("No pane to insert into", { body: "Open a terminal first.",
+                                      severity: "warning" });
+    return;
+  }
+  // No trailing newline, and pane.send rather than sendInput: this puts the
+  // command on the prompt for a human to run, in one pane, deliberately.
+  pane.send({ t: "in", d: command });
+  pane.term.focus();
+  toast("Inserted", { body: "Press Enter to run it.", severity: "ok" });
+}
+
+/* ------------------------------------------------------------- cost analysis */
+
+const money = (n) => "$" + (n || 0).toFixed(n && n < 0.01 ? 4 : 2);
+const whenever = (t) => new Date(t * 1000).toLocaleString();
+
+async function openCosts() {
+  $("#costWrap").hidden = false;
+  const body = $("#costBody");
+  body.textContent = "Loading…";
+  let d;
+  try {
+    d = await api("/api/agent/costs");
+  } catch (e) {
+    body.textContent = e.message;
+    return;
+  }
+
+  const t = d.tokens || {};
+  const peak = Math.max(...(d.by_day || []).map((x) => x.cost), 0);
+
+  const tile = (k, v, cls) =>
+    `<div class="cost-tile ${cls || ""}"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+
+  const rows = (d.recent || []).map((a) => `
+    <tr>
+      <td>${whenever(a.at)}</td>
+      <td class="ask">${escapeHtml(a.prompt)}</td>
+      <td class="num">${(a.input || 0).toLocaleString()}</td>
+      <td class="num">${(a.output || 0).toLocaleString()}</td>
+      <td class="num">${a.cost == null ? "—" : money(a.cost)}</td>
+    </tr>`).join("");
+
+  const bars = (d.by_day || []).map((x) => {
+    const h = peak > 0 ? Math.max(2, Math.round((x.cost / peak) * 62)) : 2;
+    return `<div class="cost-bar" style="height:${h}px"
+                 title="${x.day}: ${money(x.cost)} over ${x.asks} ask(s)"></div>`;
+  }).join("");
+
+  const models = (d.by_model || []).map((m) => `
+    <tr><td>${escapeHtml(m.model)}</td>
+        <td class="num">${m.asks}</td>
+        <td class="num">${money(m.cost)}</td></tr>`).join("");
+
+  body.innerHTML = `
+    <div class="cost-top">
+      ${tile("Total spend", money(d.total), "spend")}
+      ${tile("Asks", d.asks)}
+      ${tile("Average ask", money(d.average))}
+      ${tile("Tokens in", (t.input || 0).toLocaleString())}
+      ${tile("Tokens out", (t.output || 0).toLocaleString())}
+    </div>
+
+    ${d.estimated ? `<p class="cost-note cost-est">Some rows have no cost from
+      the SDK — a Claude subscription session bills nothing per request — so
+      those are priced from the published rate card and marked estimated.</p>` : ""}
+
+    <h3>Per day</h3>
+    <div class="cost-bars">${bars || ""}</div>
+    <p class="cost-note">${(d.by_day || []).length
+        ? `Last ${(d.by_day || []).length} day(s) with activity. Tallest bar = ${money(peak)}.`
+        : "Nothing asked yet."}</p>
+
+    <h3>Per model</h3>
+    <table class="cost-table">
+      <tr><th>Model</th><th>Asks</th><th>Cost</th></tr>
+      ${models || `<tr><td colspan="3">Nothing yet.</td></tr>`}
+    </table>
+
+    <h3>Recent asks</h3>
+    <table class="cost-table">
+      <tr><th>When</th><th>Question</th><th>In</th><th>Out</th><th>Cost</th></tr>
+      ${rows || `<tr><td colspan="5">Nothing yet.</td></tr>`}
+    </table>
+    <p class="cost-note">Questions are kept so a cost can be attributed to one.
+       Answers are not: this is a ledger, not a transcript.</p>
+    <button class="btn sm" id="btnCostClear">Clear the ledger</button>
+  `;
+
+  $("#btnCostClear").onclick = async () => {
+    await post("/api/agent/costs/clear").catch(() => {});
+    openCosts();
+  };
+}
+
+function closeCosts() { $("#costWrap").hidden = true; }
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text == null ? "" : String(text);
+  return div.innerHTML;
+}
+
 function wire() {
   // F1 and Escape are handled here rather than in the pane's own key handler:
   // a terminal is entitled to every other key on the keyboard, and help that
   // could not be closed without the mouse would be a poor kind of help.
   addEventListener("keydown", (e) => {
     if (e.key === "F1") { e.preventDefault(); openHelp(); return; }
-    if (e.key === "Escape" && !$("#helpWrap").hidden) { e.preventDefault(); closeHelp(); }
+    if (e.key === "Escape" && !$("#costWrap").hidden) { e.preventDefault(); closeCosts(); return; }
+    if (e.key === "Escape" && !$("#helpWrap").hidden) { e.preventDefault(); closeHelp(); return; }
+    // Ctrl+Shift+A: the ask bar. Shift keeps it off Ctrl+A, which a shell uses
+    // for start-of-line and a terminal has no business intercepting.
+    if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
+      e.preventDefault(); setAskOpen(!ask.open);
+    }
   }, true);
 
   $("#btnNew").onclick = () => openPane({});
@@ -766,6 +989,14 @@ function wire() {
   $("#btnDrawerClose").onclick = closeDrawer;
   $("#drawerScrim").onclick = closeDrawer;
   $("#btnCloseSend").onclick = () => setSync(false);
+
+  $("#btnAskBar").onclick = () => setAskOpen(!ask.open);
+  $("#btnAsk").onclick = doAsk;
+  $("#askInput").onkeydown = (e) => { if (e.key === "Enter") doAsk(); };
+  $("#btnAskClose").onclick = () => setAskOpen(false);
+  $("#btnAskCost").onclick = openCosts;
+  $("#btnCostClose").onclick = closeCosts;
+  $("#costWrap").onclick = (e) => { if (e.target.id === "costWrap") closeCosts(); };
 
   for (const b of document.querySelectorAll(".drawer-tabs button")) {
     b.onclick = () => openDrawer(b.dataset.tab);
@@ -838,6 +1069,9 @@ async function boot() {
       return;
     }
     setConn(true);
+    // Not awaited: whether the assistant is installed has no bearing on
+    // getting a pane open, and a slow answer here must not delay one.
+    loadAskState();
   } catch (e) {
     setConn(false);
     toast("Backend unreachable", { body: e.message, severity: "error" });

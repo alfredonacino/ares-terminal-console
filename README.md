@@ -13,6 +13,11 @@ Python 3.11+ and **nothing else** — no pip install, no build step. A terminal 
 what you reach for when a machine is already in a bad way, and "install this
 first" is the wrong answer at that moment.
 
+There is exactly one optional dependency, `claude-agent-sdk`, and it buys one
+optional feature: the [ask bar](#asking-about-a-command). Everything above
+still holds without it — the import is lazy, and a missing SDK costs you the
+question box and nothing else.
+
 ## What it does
 
 **Splits, like tmux.** `Ctrl+Shift+D` puts a pane beside the focused one,
@@ -70,10 +75,60 @@ back a command that no longer connects.
 | `Ctrl+Shift+W` | close the focused pane |
 | `Ctrl+Shift+S` | broadcast on/off |
 | `Ctrl+Shift+H` | connections drawer |
+| `Ctrl+Shift+A` | ask bar on/off |
 
 `Ctrl+Shift+…` rather than a tmux prefix key: a prefix has to be intercepted
 before the terminal sees it, and stealing a keystroke is how you break the one
 program the user needed it for.
+
+## Asking about a command
+
+The **ask** bar under the panes (`Ctrl+Shift+A`) puts a question to Claude
+through the [Claude Agent SDK][sdk] and answers with the command, plus a line
+on what it does and what to watch for.
+
+```
+ask  how do I find what is listening on port 8443?
+
+  ss -ltnp 'sport = :8443'                                    INSERT
+  sudo lsof -iTCP:8443 -sTCP:LISTEN -n -P                     INSERT
+
+  $0.0121  ·  908 in / 181 out  ·  3.0s  ·  claude-opus-5
+```
+
+**It never runs anything.** The agent is handed no tools and no permission to
+use any, so there is no path from a sentence somebody typed to a command this
+machine executes. `INSERT` puts the command at the prompt of the focused pane
+*without a newline*: you read it, edit it if you want, and press Enter
+yourself. Broadcast is deliberately ignored here — one click means one pane.
+
+That is the whole design argument. A terminal is the one application where
+"just run it for me" is least appropriate, because the operator is usually here
+precisely to see the command before it runs, often on a machine that is already
+in a bad way.
+
+### What it costs
+
+The `$` button opens a cost panel: total spend, per day, per model, and the
+recent asks with their tokens. The numbers come from the SDK's own accounting
+(`ResultMessage.total_cost_usd` and its per-model breakdown), so they are what
+was billed rather than a guess from a rate card. A row is marked *estimated*
+only when the SDK reported no cost at all, which is what a Claude subscription
+session does rather than an API key.
+
+Questions are stored so a cost can be attributed to one; answers are not. The
+ledger lives beside the history, in the data directory, and `Clear the ledger`
+empties it.
+
+### The one dependency
+
+`claude-agent-sdk` is the only thing in `requirements.txt`, it is optional, and
+it is imported lazily. `apex setup terminal` installs it into the module's own
+`.venv`. Without it the bar says so and everything else works unchanged —
+a terminal has to open on a machine with no SDK, no Node and no network, which
+is generally why you reach for one.
+
+[sdk]: https://code.claude.com/docs/en/agent-sdk
 
 ## Where it runs
 

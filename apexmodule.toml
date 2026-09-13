@@ -9,8 +9,8 @@
 [module]
 id       = "terminal"
 name     = "Apex Terminal"
-version  = "1.0.0"
-summary  = "Split-pane terminals with broadcast, keep-alive and a connection history."
+version  = "1.1.0"
+summary  = "Split-pane terminals with broadcast, keep-alive, a connection history and an AI command assistant."
 icon     = ">_"        # 1-3 characters for the sidebar tile
 accent   = "#b14cff"      # tile colour
 contract = 1
@@ -28,4 +28,4 @@ embeddable    = true                # false -> opened in its own window instead
 # The history file holds command lines and lives in the data
 # directory, never in the checkout -- but exclude it anyway in case
 # somebody runs with --data-dir .
-exclude = ["history.json", "*.db"]
+exclude = ["history.json", "agent-costs.json", "*.db"]
