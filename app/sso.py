@@ -182,6 +182,32 @@ class Verifier:
                 del self._seen[jti]
 
 
+def payload_of(ticket: str) -> dict:
+    """The claims inside a ticket **this process just minted**.
+
+    Not a verification step and not for anything that arrived from outside: it
+    reads the payload without checking the signature, which is safe only
+    because the caller is the issuer. Use Verifier.verify for anything else.
+    """
+    try:
+        return json.loads(_unb64(ticket.split(".")[1]))
+    except Exception as e:
+        raise ValueError("malformed ticket") from e
+
+
+def redemption_mac(key: str, module_id: str, jti: str) -> str:
+    """What a module signs to trade a ticket id for its vault key.
+
+    The module already holds the signing key -- the shell put it in its
+    environment at launch -- so this needs no new secret. It proves "I am a
+    process the shell started", and the jti proves which sign-on it is about.
+    Same function on both sides; compared in constant time.
+    """
+    mac = hmac.new(_key_bytes(key), f"vault-key.{module_id}.{jti}".encode("ascii"),
+                   hashlib.sha256).digest()
+    return _b64(mac)
+
+
 def from_environment(audience: str):
     """A Verifier from APEX_SSO_KEY, or None when the app was started alone.
 
