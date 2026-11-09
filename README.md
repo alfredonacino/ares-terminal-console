@@ -88,6 +88,42 @@ anything reaches the disk — `--password`, `--token`, `sshpass -p`, credentials
 in URLs — while `ssh -p 2222` keeps its port, because redacting that would hand
 back a command that no longer connects.
 
+## Server tools
+
+A pane running `ssh …` gets a **◈ server** button (or `Ctrl+Shift+X`). It opens
+seven tools for the machine on the other end, brought over from ARES Ultimate
+Console and TractorBeam:
+
+| | |
+| --- | --- |
+| ♥ **Health & processes** | CPU, memory, disk, load and network, refreshed every 5 s, with the top processes and a two-click Stop |
+| ⚡ **Performance analysis** | a quick, standard or long sampled check: findings, charts and tables, saying what is slow and why |
+| ☰ **Log analysis** | errors and warnings from the journal and syslog, grouped and counted |
+| ✦ **AI log analysis** | those lines explained by Claude: verdict, likely cause, the first command to run |
+| ▤ **Packages & technologies** | installed packages and the runtimes, servers and databases they add up to |
+| ⛨ **Vulnerability scan** | pending security updates, server issues, and known CVEs looked up on OSV.dev |
+| ↺ **Server history** | every scan and analysis of this machine, kept across sessions |
+
+**Nothing is installed on the server, and nothing is changed.** Each tool is a
+read-only shell script fed to `sh -s` over SSH. Panes started with `ssh` are
+given OpenSSH multiplexing (`ControlMaster=auto`, a socket under
+`~/.ssh/ares-tc/`), so the tools ride the login you already typed — a password,
+a one-time code or a hardware key is asked for once, in the pane, and never by
+a tool. A command that sets its own ControlMaster/ControlPath keeps it. Windows'
+OpenSSH cannot multiplex, so there the tools need a key or an agent.
+
+**A server is recognised by what it is, not what it is called.** History is
+keyed on the machine's identity (`/etc/machine-id` and friends, or its SSH host
+key fingerprint when nothing else is readable), so the same box reached by name,
+by IP or through a jump host has one history.
+
+**AI only with consent.** Before anything goes to Claude the tool shows *exactly*
+what will be sent — secrets already replaced with `***`, no address, no server
+identity — and sends that and nothing more when you press **Send to Claude**.
+The answer goes through your Claude Code subscription, is saved to the server's
+history, and its usage appears in the ask bar's cost ledger. The OSV.dev lookup
+is the same: the package list is shown before it leaves the machine.
+
 ## Keys
 
 | | |
@@ -98,6 +134,7 @@ back a command that no longer connects.
 | `Ctrl+Shift+S` | broadcast on/off |
 | `Ctrl+Shift+H` | connections drawer |
 | `Ctrl+Shift+A` | ask bar on/off |
+| `Ctrl+Shift+X` | server tools for the focused SSH pane |
 
 `Ctrl+Shift+…` rather than a tmux prefix key: a prefix has to be intercepted
 before the terminal sees it, and stealing a keystroke is how you break the one
@@ -270,6 +307,8 @@ ares-terminal-console/
     ├── desktop.py       the desktop window, one server per user, --self-test
     ├── websocket.py     RFC 6455 framing, and the keep-alive ping
     ├── pty_session.py   PTYs (ConPTY on Windows), scrollback, the session registry
+    ├── remote.py        an SSH pane's target, multiplexing, running probes over it
+    ├── insight/         the server tools: probes, analysis, history (service.py)
     ├── history.py       history, saved connections, redaction
     ├── shell_env.py     the colour scheme and the ls/ll/la wrappers
     └── static/          the UI (xterm.js vendored, no CDN)

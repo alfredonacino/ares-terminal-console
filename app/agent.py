@@ -334,13 +334,32 @@ def ask(prompt: str, cwd: str = "", model: str = "") -> dict:
         return {"ok": False, "error": f"{e.__class__.__name__}: {e}"}
 
 
-async def _ask(prompt: str, cwd: str, model: str, cli: str = "") -> dict:
+def analyse(payload: str, system: str, label: str = "", model: str = "") -> dict:
+    """Send one analysis pack (logs, a performance report) with its own prompt.
+
+    The same path as an ask -- the operator's Claude Code and its subscription,
+    no tools, one turn -- with a system prompt of the caller's and room for a
+    pack of tens of kilobytes. The caller shows the payload before sending it.
+    """
+    import asyncio
+    ready = state()
+    if not ready["available"]:
+        return {"ok": False, "error": ready["detail"], "reason": ready["reason"]}
+    try:
+        result = asyncio.run(_ask(payload, "", model, ready.get("cli", ""), system=system))
+    except Exception as e:
+        return {"ok": False, "error": f"{e.__class__.__name__}: {e}"}
+    result["label"] = label
+    return result
+
+
+async def _ask(prompt: str, cwd: str, model: str, cli: str = "", system: str = "") -> dict:
     from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions,
                                   ResultMessage, TextBlock, query)
     import asyncio
 
     options = ClaudeAgentOptions(
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system or SYSTEM_PROMPT,
         # No tools, and no permission to use any. See the module docstring:
         # this answers questions about commands, it does not run them.
         tools=[],

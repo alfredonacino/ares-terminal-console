@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ARES Terminal Console</title>
+<link rel="icon" type="image/png" href="icon.png">
 <link rel="stylesheet" href="vendor/xterm/xterm.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -19,7 +20,7 @@
             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <div class="brand-text">
-      <strong>TERMINAL</strong>
+      <strong>ARES TERMINAL CONSOLE</strong>
       <span id="paneCount">no panes</span>
     </div>
   </div>
@@ -159,6 +160,24 @@
   </div>
 </div>
 
+<!-- Server tools: health, performance, logs, AI, packages, vulnerabilities and
+     history for the server an SSH pane is connected to. See insight.js. -->
+<div class="sheet-wrap" id="insightWrap" hidden>
+  <div class="sheet ins-sheet" role="dialog" aria-modal="true" aria-labelledby="insightTitle">
+    <header class="sheet-head">
+      <div class="ins-head">
+        <h2 id="insightTitle">server</h2>
+        <span class="ins-ident" id="insightIdent"></span>
+      </div>
+      <button class="icon-btn" id="btnInsightClose" title="Close (Esc)">&times;</button>
+    </header>
+    <div class="ins-layout">
+      <nav class="ins-nav" id="insightNav" aria-label="Server tools"></nav>
+      <div class="ins-body" id="insightBody"></div>
+    </div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
 
@@ -280,5 +299,6 @@
 <script src="vendor/xterm/xterm.min.js"></script>
 <script src="vendor/xterm/xterm-addon-fit.min.js"></script>
 <script src="app.js"></script>
+<script src="insight.js"></script>
 </body>
 </html>

@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import agent, pty_session, shell_env, sso       # noqa: E402
 from app.history import History                          # noqa: E402
+from app.insight import service as insight_service        # noqa: E402
 from app.websocket import WebSocket, WebSocketClosed, is_upgrade  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
@@ -86,6 +87,8 @@ LEDGER = None
 SSO_USER = {}
 
 REGISTRY = pty_session.Registry()
+INSIGHT = None          # set in start(): the server tools, one per SSH pane
+SERVERS = None          # set in start(): every server studied, by its identity
 HISTORY = None          # set in serve()
 SHIMS = {}              # set in serve(): which wrapper commands exist
 EMBED_ORIGIN = ""
@@ -370,6 +373,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, **agent.state(refresh=self._q1("refresh") == "1")})
         if path == "/api/agent/costs":
             return self._json({"ok": True, **LEDGER.analysis()})
+        if path == "/api/servers":
+            return self._json({"ok": True, "servers": SERVERS.servers()})
+        if path.startswith("/api/servers/"):
+            server = SERVERS.get(urllib.parse.unquote(path.split("/", 3)[3]))
+            return self._json({"ok": bool(server), "server": server},
+                              status=200 if server else 404)
+        if path.startswith("/api/insight/"):
+            return self._insight(path, {})
         return self._static(path)
 
     def do_HEAD(self):
@@ -406,7 +417,13 @@ class Handler(BaseHTTPRequestHandler):
         parts = path.strip("/").split("/")
         if len(parts) == 4 and parts[1] == "sessions" and parts[3] == "kill":
             ok = REGISTRY.kill(parts[2])
+            INSIGHT.drop(parts[2])
             return self._json({"ok": ok})
+
+        if path.startswith("/api/insight/"):
+            return self._insight(path, body)
+        if len(parts) == 4 and parts[1] == "servers" and parts[3] == "forget":
+            return self._json({"ok": SERVERS.forget(urllib.parse.unquote(parts[2]))})
 
         if path == "/api/history/save":
             name = str(body.get("name") or "")
@@ -445,6 +462,72 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, **LEDGER.analysis()})
 
         return self._json({"ok": False, "error": "unknown endpoint"}, status=404)
+
+    # ------------------------------------------------------------ server tools
+
+    def _insight(self, path: str, body: dict):
+        """/api/insight/<session>/<tool>[/<step>] -- see app/insight/service.py.
+
+        Every tool works on the server the pane is connected to, over the
+        pane's own SSH login. A failure is a 400 with words, never a trace.
+        """
+        parts = path.strip("/").split("/")[2:]
+        if len(parts) < 2:
+            return self._json({"ok": False, "error": "unknown endpoint"}, status=404)
+        session = REGISTRY.get(parts[0])
+        if session is None:
+            return self._json({"ok": False, "error": "That pane has closed."}, status=404)
+        tool, step = parts[1], "/".join(parts[2:])
+        post = self.command == "POST"
+        try:
+            item = INSIGHT.get(session)
+            if tool == "identity":
+                out = item.identify(refresh=post)
+            elif tool == "health" and not post:
+                out = item.health()
+            elif tool == "health" and step == "stop":
+                out = item.stop_process(int(body.get("pid") or 0), bool(body.get("force")))
+            elif tool == "perf" and not post:
+                out = item.perf_status(int(self._q1("tzo") or 0))
+            elif tool == "perf" and step == "start":
+                out = item.perf_start(str(body.get("mode") or "quick"),
+                                      int(body.get("duration") or 0), int(body.get("interval") or 0))
+            elif tool == "perf" and step == "stop":
+                out = item.perf_stop()
+            elif tool == "perf" and step == "ai/preview":
+                out = {"payload": item.perf_ai_preview()}
+            elif tool == "perf" and step == "ai":
+                out = self._charged(item.perf_ai(str(body.get("payload") or "")),
+                                    "AI performance analysis")
+            elif tool == "logs" and post and not step:
+                out = item.logs()
+            elif tool == "logs" and step == "ai/preview":
+                out = item.logs_ai_preview()
+            elif tool == "logs" and step == "ai":
+                out = self._charged(item.logs_ai(str(body.get("payload") or "")),
+                                    "AI log analysis")
+            elif tool == "packages" and post:
+                out = item.packages()
+            elif tool == "vulns" and post and not step:
+                out = item.vulns()
+            elif tool == "vulns" and step == "lookup":
+                out = item.vulns_lookup()
+            elif tool == "history":
+                out = item.server_history()
+            else:
+                return self._json({"ok": False, "error": "unknown endpoint"}, status=404)
+        except insight_service.InsightError as e:
+            return self._json({"ok": False, "error": str(e)}, status=400)
+        except (ValueError, TypeError) as e:
+            return self._json({"ok": False, "error": f"bad request: {e}"}, status=400)
+        return self._json({"ok": True, **out})
+
+    def _charged(self, result: dict, what: str) -> dict:
+        """An AI analysis goes in the cost ledger like any other ask."""
+        usage = result.get("usage") or {}
+        if usage:
+            LEDGER.record(f"[{what}] {session_label(self)}", usage, ok=True)
+        return result
 
     # --------------------------------------------------------------- websocket
 
@@ -499,6 +582,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, target.read_bytes(), ctype)
         except OSError as e:
             self._send(500, str(e).encode(), "text/plain; charset=utf-8")
+
+
+def session_label(handler) -> str:
+    """Which server an analysis was about, for the ledger's question column."""
+    parts = urllib.parse.urlsplit(handler.path).path.strip("/").split("/")
+    session = REGISTRY.get(parts[2]) if len(parts) > 2 else None
+    return session.ssh_label() if session else ""
 
 
 def pump(ws: WebSocket, session) -> None:
@@ -613,12 +703,14 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
     app listens beyond loopback, read from ARES_ACCESS_TOKEN or kept in the
     data folder. "" turns it off; any other string is the token.
     """
-    global HISTORY, LEDGER, SHIMS, SSO, ACCESS_TOKEN
+    global HISTORY, LEDGER, SHIMS, SSO, ACCESS_TOKEN, INSIGHT, SERVERS
 
     data_dir = data_dir or default_data_dir()
     os.makedirs(data_dir, exist_ok=True)
     HISTORY = History(os.path.join(data_dir, "history.json"))
     LEDGER = agent.Ledger(os.path.join(data_dir, "agent-costs.json"))
+    SERVERS = insight_service.ServerHistory(os.path.join(data_dir, "servers.json"))
+    INSIGHT = insight_service.Registry(SERVERS)
 
     # Colour. A pane is monochrome without both halves of this: a scheme in
     # LS_COLORS, and an `ls` that has been asked to use it. See shell_env.py.

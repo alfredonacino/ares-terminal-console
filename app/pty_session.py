@@ -145,6 +145,9 @@ class Session:
             return self._spawn_windows(env)
 
         argv = shlex.split(self.command) if self.command.strip() else [DEFAULT_SHELL]
+        # An ssh pane shares its login with the server tools (see remote.py).
+        from app import remote
+        argv = remote.pane_argv(self.command) or argv
         pid, fd = pty.fork()
         if pid == 0:  # child
             try:
@@ -212,13 +215,16 @@ class Session:
         pending = bytearray()
         last_flush = time.monotonic()
         while True:
+            fd = self.fd
+            if fd is None:          # close() got there first
+                break
             try:
-                ready, _, _ = select.select([self.fd], [], [], COALESCE_S)
-            except (OSError, ValueError):
+                ready, _, _ = select.select([fd], [], [], COALESCE_S)
+            except (OSError, ValueError, TypeError):
                 break
             if ready:
                 try:
-                    chunk = os.read(self.fd, READ_CHUNK)
+                    chunk = os.read(fd, READ_CHUNK)
                 except OSError as e:
                     # EIO is how a PTY reports "the child closed the other end",
                     # which is the normal end of every session.
@@ -448,7 +454,14 @@ class Session:
             "antiidle": self.antiidle_interval,
             "idle_for": round(time.time() - self.last_activity, 1),
             "bytes": len(self._scrollback),
+            "ssh": self.ssh_label(),
         }
+
+    def ssh_label(self) -> str:
+        """user@host[:port] when this pane is an SSH connection, else ""."""
+        from app import remote
+        target = remote.parse(self.command)
+        return remote.label(target) if target else ""
 
 
 class Registry:

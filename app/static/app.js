@@ -152,6 +152,10 @@ class Pane {
         this.dotEl,
         this.titleEl,
         this.tagEl,
+        this.session.ssh
+          ? el("button", { class: "pane-tools", title: `Server tools for ${this.session.ssh} (Ctrl+Shift+X)`,
+                           onClick: (e) => { e.stopPropagation(); openInsight(this); } }, "◈ server")
+          : null,
         el("button", { class: "icon-btn", title: "Split vertical",
                        onClick: (e) => { e.stopPropagation(); splitPane(this.id, "v"); } }, "⬒"),
         el("button", { class: "icon-btn", title: "Close pane",

@@ -4,4 +4,5 @@
 pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
 pywinpty>=2.0.14; sys_platform == "win32"
 claude-agent-sdk>=0.2.152
+certifi
 pyinstaller==6.22.3
