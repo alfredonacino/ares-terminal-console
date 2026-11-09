@@ -282,6 +282,12 @@ class Session:
                 q.put_nowait(None)     # sentinel: the session is over
             except queue.Full:
                 pass
+        hook = getattr(self, "on_end", None)
+        if hook:
+            try:
+                hook(self)
+            except Exception:      # a bookkeeping failure must not kill the pump
+                pass
 
     # -------------------------------------------------------------- attach/io
 

@@ -73,14 +73,31 @@ function toast(title, { body = "", severity = "info" } = {}) {
 /* ---------------------------------------------------------------- the model */
 
 const state = {
-  tree: null,              // {type:'leaf', pane} | {type:'split', dir, a, b, ratio}
-  panes: new Map(),        // paneId -> Pane
-  focus: null,             // paneId
-  sync: false,             // broadcast typing
+  panes: new Map(),        // paneId -> Pane, across every tab
+  tabs: [],                // {id, name, custom, tree, focus}
+  tab: null,               // the tab on screen
+  sync: false,             // broadcast typing -- to the tab on screen
   antiidle: 0,
   nextId: 1,
+  nextTab: 1,
   drawerTab: "saved",
+  cmdFilter: { session: "", connection: "", label: "" },
 };
+
+/* Each tab has its own layout tree and focus. `state.tree` and `state.focus`
+   are the tab on screen's, so everything that lays out panes works on one
+   tab without knowing tabs exist. A tree is
+   {type:'leaf', pane} | {type:'split', dir, a, b, ratio}. */
+Object.defineProperties(state, {
+  tree: {
+    get() { return this.tab ? this.tab.tree : null; },
+    set(v) { (this.tab || addTab()).tree = v; },
+  },
+  focus: {
+    get() { return this.tab ? this.tab.focus : null; },
+    set(v) { if (this.tab) this.tab.focus = v; },
+  },
+});
 
 const XTERM_THEME = {
   background: "#05070e", foreground: "#d8e3f5", cursor: "#00f0ff",
@@ -131,7 +148,24 @@ class Pane {
     this.fit = new FitAddon.FitAddon();
     this.term.loadAddon(this.fit);
 
+    this.tab = state.tab ? state.tab.id : null;
+    this.lineStart = null;       // where the command being typed began
+    this.where = {};             // host, ip, cwd -- see fetchWhere()
+    this.whereAt = 0;
+    this.outputAt = Date.now();
     this.el = this.build();
+    // A shell that reports its directory (OSC 7, file://host/path) is
+    // believed at once; the server-side lookup is the fallback.
+    this.term.parser.registerOscHandler(7, (data) => {
+      const m = /^file:\/\/([^/]*)(\/.*)$/.exec(data);
+      if (m) {
+        let cwd = m[2];
+        try { cwd = decodeURIComponent(cwd); } catch (_) { /* keep it raw */ }
+        this.osc7 = { host: m[1], cwd };
+        this.showWhere();
+      }
+      return true;
+    });
     this.term.onData((data) => sendInput(this, data));
     this.term.onResize(({ cols, rows }) => this.send({ t: "resize", cols, rows }));
     this.connect();
@@ -139,6 +173,14 @@ class Pane {
 
   build() {
     this.titleEl = el("span", { class: "pane-title", text: this.session.label });
+    this.hostEl = el("span", { class: "pw pw-host", hidden: true });
+    this.ipEl = el("span", { class: "pw pw-ip", hidden: true });
+    this.cwdText = el("bdi", {});
+    this.cwdEl = el("span", { class: "pw pw-cwd", hidden: true,
+                              title: "Current directory — click to copy",
+                              onClick: (e) => { e.stopPropagation(); this.copyCwd(); } }, this.cwdText);
+    this.whereEl = el("span", { class: "pane-where" }, this.hostEl, this.ipEl, this.cwdEl);
+    queueMicrotask(() => this.showTitle());
     this.tagEl = el("span", { class: "pane-tag idle", hidden: true, text: "anti-idle" });
     this.dotEl = el("span", { class: "pane-dot" });
     this.bodyEl = el("div", { class: "pane-body" });
@@ -151,7 +193,10 @@ class Pane {
       el("div", { class: "pane-head" },
         this.dotEl,
         this.titleEl,
+        this.whereEl,
         this.tagEl,
+        el("button", { class: "pane-cmds", title: "Commands sent to this pane",
+                       onClick: (e) => { e.stopPropagation(); showCommandsFor(this); } }, "⌘"),
         this.session.ssh
           ? el("button", { class: "pane-tools", title: `Server tools for ${this.session.ssh} (Ctrl+Shift+X)`,
                            onClick: (e) => { e.stopPropagation(); openInsight(this); } }, "◈ server")
@@ -193,11 +238,12 @@ class Pane {
       setConn(true);
       this.send({ t: "resize", cols: this.term.cols, rows: this.term.rows });
       if (state.antiidle) this.send({ t: "antiidle", interval: state.antiidle });
+      this.scheduleWhere(1200);
     };
     ws.onmessage = (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch (_) { this.term.write(ev.data); return; }
-      if (msg.t === "out") this.term.write(msg.d);
+      if (msg.t === "out") { this.term.write(msg.d); this.outputAt = Date.now(); }
       else if (msg.t === "info") this.applyInfo(msg.session);
       else if (msg.t === "exit") this.onExit(msg.code);
     };
@@ -220,7 +266,121 @@ class Pane {
     if (!info) return;
     this.session = Object.assign({}, this.session, info);
     this.tagEl.hidden = !info.antiidle;
-    this.titleEl.textContent = info.label || info.command;
+    this.showTitle();
+    renderTabs();
+  }
+
+  showTitle() {
+    // An ssh pane is titled by where it goes, not by its options; the whole
+    // command is in the tooltip.
+    const s = this.session;
+    const named = s.label && s.label !== s.command ? s.label : "";
+    this.titleEl.textContent = named || (s.ssh ? "ssh " + s.ssh : s.command || s.label || "shell");
+    this.titleEl.title = s.command || "";
+  }
+
+  /* ---- the commands sent to this pane
+
+     Read back off the screen, not reassembled from keystrokes: what reaches
+     the shell is what tab-completion, the arrow keys and Ctrl+R produced, and
+     the screen is where that is written down. The line's start is marked at
+     the first key after the prompt; on Enter, that line (and any wrapped
+     continuation) is read a moment later, once its echo has arrived. A
+     password prompt does not echo, so a password is never recorded. Inside a
+     full-screen program (the alternate screen) nothing is recorded at all. */
+
+  track(data) {
+    const buf = this.term.buffer.active;
+    if (buf.type === "alternate") { this.dropLine(); return; }
+    if (data === "\x03") { this.dropLine(); return; }           // Ctrl+C
+    if (data.length > 1 && /[\r\n]/.test(data.slice(0, -1))) {   // a multi-line paste
+      for (const line of data.split(/\r\n|\r|\n/)) if (line.trim()) this.logCommand(line, "pasted");
+      this.dropLine();
+      return;
+    }
+    if (!this.lineStart) {
+      const marker = this.term.registerMarker(0);
+      if (marker) this.lineStart = { marker, x: buf.cursorX };
+    }
+    if (data.endsWith("\r") || data.endsWith("\n")) {
+      const start = this.lineStart;
+      this.lineStart = null;
+      if (start) setTimeout(() => this.captureLine(start), 350);
+    }
+  }
+
+  dropLine() {
+    if (this.lineStart) { try { this.lineStart.marker.dispose(); } catch (_) { /* gone */ } }
+    this.lineStart = null;
+  }
+
+  captureLine(start) {
+    const b = this.term.buffer.normal;
+    const { marker } = start;
+    if (marker.isDisposed || marker.line < 0) return;
+    let y = marker.line;
+    let text = (b.getLine(y)?.translateToString(true) || "").slice(start.x);
+    while (b.getLine(y + 1)?.isWrapped) { y++; text += b.getLine(y).translateToString(true); }
+    marker.dispose();
+    text = text.trim();
+    if (text) this.logCommand(text, "typed");
+  }
+
+  logCommand(text, how) {
+    post(`/api/sessions/${encodeURIComponent(this.session.id)}/command`, { command: text, how })
+      .then(() => { if (!$("#drawer").hidden && state.drawerTab === "commands") refreshDrawer(); })
+      .catch(() => {});
+    this.scheduleWhere(900);
+  }
+
+  /* ---- where this pane is: host, address, directory */
+
+  scheduleWhere(delay = 900) {
+    clearTimeout(this.whereTimer);
+    this.whereTimer = setTimeout(() => this.fetchWhere(), delay);
+  }
+
+  async fetchWhere() {
+    if (this.dead || this.whereBusy) return;
+    this.whereBusy = true;
+    try {
+      this.where = await api(`/api/sessions/${encodeURIComponent(this.session.id)}/where`);
+    } catch (_) {
+      /* the title bar keeps what it had */
+    } finally {
+      this.whereBusy = false;
+      this.whereAt = Date.now();
+    }
+    this.showWhere();
+  }
+
+  showWhere() {
+    const w = this.where || {};
+    const ssh = this.session.ssh || "";
+    let host = w.host || (this.osc7 && this.osc7.host) || (ssh ? ssh.replace(/^.*@/, "").replace(/:\d+$/, "") : "");
+    const user = w.user || (ssh.includes("@") ? ssh.split("@")[0] : "");
+    const cwd = (this.osc7 && this.osc7.cwd) || w.cwd || "";
+    this.hostEl.hidden = !host;
+    this.hostEl.textContent = (w.hop ? "→ " : "⌂ ") + host;
+    this.hostEl.title = w.hop
+      ? `This shell has connected on to ${w.hop}`
+      : `${user ? user + "@" : ""}${host}${w.remote ? " (remote)" : " (this machine)"}`;
+    this.ipEl.hidden = !w.ip;
+    this.ipEl.textContent = w.ip || "";
+    this.ipEl.title = "IP address";
+    this.cwdEl.hidden = !cwd;
+    this.cwdText.textContent = cwd;
+    this.cwdEl.title = `${cwd}\nclick to copy`;
+    this.el.dataset.host = host;
+    renderTabs();
+  }
+
+  copyCwd() {
+    const cwd = this.cwdText.textContent;
+    if (!cwd) return;
+    navigator.clipboard?.writeText(cwd).then(
+      () => toast("Path copied", { body: cwd, severity: "ok" }),
+      () => toast("Could not copy", { body: cwd, severity: "warning" }));
   }
 
   onExit(code) {
@@ -250,6 +410,7 @@ class Pane {
   dispose() {
     this.closing = true;
     clearTimeout(this.retryTimer);
+    clearTimeout(this.whereTimer);
     if (this.ws) { try { this.ws.close(); } catch (_) { /* already gone */ } }
     try { this.term.dispose(); } catch (_) { /* already disposed */ }
   }
@@ -259,18 +420,23 @@ class Pane {
 
 function sendInput(pane, data) {
   // The one place broadcast exists. Every pane's keystrokes arrive here and
-  // this decides how many sessions hear them.
-  if (!state.sync) { pane.send({ t: "in", d: data }); return; }
-  for (const p of state.panes.values()) {
-    if (!p.dead) p.send({ t: "in", d: data });
+  // this decides how many sessions hear them: with broadcast on, every pane
+  // in the tab on screen -- never a tab you cannot see.
+  const targets = state.sync ? tabPanes(state.tab) : [pane];
+  for (const p of targets) {
+    if (!p.dead && p.send({ t: "in", d: data })) p.track(data);
   }
 }
 
 function sendToAll(line) {
   const text = line.endsWith("\n") ? line : line + "\r";
   let n = 0;
-  for (const p of state.panes.values()) {
-    if (!p.dead && p.send({ t: "in", d: text })) n++;
+  for (const p of tabPanes(state.tab)) {
+    if (!p.dead && p.send({ t: "in", d: text })) {
+      n++;
+      p.dropLine();
+      p.logCommand(line.trim(), "broadcast");
+    }
   }
   return n;
 }
@@ -331,6 +497,7 @@ function render() {
 
   if (state.tree) host.append(build(state.tree));
   $("#emptyState").hidden = !!state.tree;
+  renderTabs();
 
   for (const pane of state.panes.values()) {
     pane.el.classList.toggle("focus", pane.id === state.focus);
@@ -339,12 +506,15 @@ function render() {
   document.body.classList.toggle("syncing", state.sync);
 
   const live = [...state.panes.values()].filter((p) => !p.dead).length;
+  const tabs = state.tabs.length;
   $("#paneCount").textContent = state.panes.size
-    ? `${state.panes.size} pane${state.panes.size === 1 ? "" : "s"} · ${live} live`
+    ? `${state.panes.size} pane${state.panes.size === 1 ? "" : "s"} · ${live} live` +
+      (tabs > 1 ? ` · ${tabs} tabs` : "")
     : "no panes";
   requestAnimationFrame(() => {
-    for (const pane of state.panes.values()) pane.refit();
+    for (const pane of tabPanes(state.tab)) { pane.refit(); if (!pane.whereAt) pane.scheduleWhere(300); }
   });
+  saveLayout();
 }
 
 function build(node) {
@@ -393,7 +563,7 @@ function wireDivider(divider, wrap, node, a, b) {
 
 /* ----------------------------------------------------------------- actions */
 
-async function openPane({ command = "", cwd = "", label = "", split = null } = {}) {
+async function openPane({ command = "", cwd = "", label = "", split = null, newTab = false } = {}) {
   const cols = 80, rows = 24;
   let data;
   try {
@@ -402,6 +572,9 @@ async function openPane({ command = "", cwd = "", label = "", split = null } = {
     toast("Could not open a terminal", { body: e.message, severity: "error" });
     return null;
   }
+  // A new connection gets a tab of its own -- unless the tab on screen is
+  // empty, in which case it is that tab.
+  if (!state.tab || (newTab && state.tree)) switchTab(addTab(), false);
   const pane = new Pane(data.session);
   state.panes.set(pane.id, pane);
 
@@ -430,7 +603,7 @@ function splitPane(paneId, dir) {
   return openPane({ split: dir });
 }
 
-function closePane(paneId) {
+function closePane(paneId, { quiet = false } = {}) {
   const pane = state.panes.get(paneId);
   if (!pane) return;
   // The pane goes; the session only goes if it is still running, because a
@@ -438,11 +611,15 @@ function closePane(paneId) {
   if (!pane.dead) post(`/api/sessions/${encodeURIComponent(pane.session.id)}/kill`).catch(() => {});
   pane.dispose();
   state.panes.delete(paneId);
-  state.tree = removeLeaf(state.tree, paneId);
-  if (state.focus === paneId) {
-    const next = firstLeaf(state.tree);
-    state.focus = next ? next.pane : null;
+  const tab = state.tabs.find((t) => t.id === pane.tab) || state.tab;
+  tab.tree = removeLeaf(tab.tree, paneId);
+  if (tab.focus === paneId) {
+    const next = firstLeaf(tab.tree);
+    tab.focus = next ? next.pane : null;
   }
+  // A tab whose last pane closed goes too, unless it is the only one.
+  if (!tab.tree && state.tabs.length > 1) dropTab(tab);
+  if (quiet) return;
   render();
   if (state.focus) state.panes.get(state.focus)?.term.focus();
   refreshDrawer();
@@ -454,6 +631,209 @@ function focusPane(paneId) {
   for (const pane of state.panes.values()) {
     pane.el.classList.toggle("focus", pane.id === paneId);
   }
+  const pane = state.panes.get(paneId);
+  if (pane && Date.now() - pane.whereAt > 10_000) pane.scheduleWhere(100);
+  saveLayout();
+}
+
+/* -------------------------------------------------------------------- tabs
+
+   A tab is a workspace: its own split layout, its own focus. New connections
+   open in a new tab; + Pane and the splits work inside the tab on screen.
+   Panes in other tabs keep running and keep their scrollback -- switching
+   only changes which tree is drawn. */
+
+function tabPanes(tab) {
+  if (!tab) return [];
+  return [...state.panes.values()].filter((p) => p.tab === tab.id);
+}
+
+function addTab(name = "") {
+  const tab = { id: "t" + state.nextTab++, name, custom: !!name, tree: null, focus: null };
+  state.tabs.push(tab);
+  if (!state.tab) state.tab = tab;
+  return tab;
+}
+
+function switchTab(tab, draw = true) {
+  if (!tab) return;
+  state.tab = tab;
+  if (!draw) return;
+  render();
+  const pane = state.focus && state.panes.get(state.focus);
+  if (pane) { pane.term.focus(); if (Date.now() - pane.whereAt > 10_000) pane.scheduleWhere(100); }
+}
+
+function dropTab(tab) {
+  const i = state.tabs.indexOf(tab);
+  if (i < 0) return;
+  state.tabs.splice(i, 1);
+  if (state.tab === tab) state.tab = state.tabs[Math.min(i, state.tabs.length - 1)] || null;
+}
+
+function closeTab(tab) {
+  for (const p of tabPanes(tab)) closePane(p.id, { quiet: true });
+  if (state.tabs.includes(tab)) {          // the only tab: keep it, empty
+    tab.tree = null; tab.focus = null;
+    if (tab.custom === false) tab.name = "";
+  }
+  render();
+  const pane = state.focus && state.panes.get(state.focus);
+  if (pane) pane.term.focus();
+  refreshDrawer();
+}
+
+function tabName(tab) {
+  if (tab.custom && tab.name) return tab.name;
+  const panes = tabPanes(tab);
+  const first = (tab.focus && state.panes.get(tab.focus)) || panes[0];
+  if (!first) return "new tab";
+  const s = first.session;
+  return s.ssh || (s.label && s.label !== s.command ? s.label : "") ||
+         (first.where && first.where.host ? first.where.host : "") || "local";
+}
+
+function renderTabs() {
+  const bar = $("#tabList");
+  if (!bar) return;
+  const frag = document.createDocumentFragment();
+  state.tabs.forEach((tab, i) => {
+    const panes = tabPanes(tab);
+    const live = panes.filter((p) => !p.dead).length;
+    const ssh = panes.some((p) => p.session.ssh);
+    const name = el("span", { class: "tab-name", text: tabName(tab) });
+    const close = el("button", {
+      class: "tab-x", title: live ? `Close this tab and its ${live} terminal(s)` : "Close this tab",
+      onClick: (e) => {
+        e.stopPropagation();
+        // Closing a tab ends its terminals. One click arms it; the second
+        // does it -- a tab can hold a session somebody cannot get back.
+        if (live && !close.classList.contains("arm")) {
+          close.classList.add("arm");
+          close.textContent = `close ${live}?`;
+          setTimeout(() => { close.classList.remove("arm"); close.textContent = "×"; }, 3000);
+          return;
+        }
+        closeTab(tab);
+      },
+    }, "×");
+    const node = el("div", {
+      class: "tab" + (tab === state.tab ? " on" : "") + (ssh ? " ssh" : ""),
+      role: "tab", title: `${tabName(tab)} — ${panes.length} pane(s), ${live} live` +
+                          "\nDouble-click to rename · Ctrl+PageUp/PageDown to switch",
+      onClick: () => { if (tab !== state.tab) switchTab(tab); },
+      onDblclick: () => renameTab(tab, name),
+    },
+      el("span", { class: "tab-dot" + (live ? "" : " dead") }),
+      el("span", { class: "tab-kind", text: ssh ? "⇄" : "▸" }),
+      name,
+      panes.length > 1 ? el("span", { class: "tab-count", text: String(panes.length) }) : null,
+      close);
+    frag.append(node);
+  });
+  bar.replaceChildren(frag);
+  const on = bar.querySelector(".tab.on");
+  if (on) on.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function renameTab(tab, nameEl) {
+  const input = el("input", { class: "tab-rename", value: tabName(tab), spellcheck: "false" });
+  const done = (keep) => {
+    if (keep) {
+      const v = input.value.trim();
+      tab.custom = !!v;
+      tab.name = v;
+    }
+    renderTabs();
+    saveLayout();
+  };
+  input.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") done(true);
+    if (e.key === "Escape") done(false);
+  };
+  input.onblur = () => done(true);
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function cycleTab(step) {
+  if (state.tabs.length < 2) return;
+  const i = state.tabs.indexOf(state.tab);
+  switchTab(state.tabs[(i + step + state.tabs.length) % state.tabs.length]);
+}
+
+/* The layout is remembered in this browser (by session id), so a reload
+   comes back to the same tabs and splits rather than one long row. */
+const LAYOUT_KEY = "ares-tc.layout";
+
+function saveLayout() {
+  const ser = (node) => {
+    if (!node) return null;
+    if (node.type === "leaf") {
+      const p = state.panes.get(node.pane);
+      return p ? { type: "leaf", session: p.session.id } : null;
+    }
+    return { type: "split", dir: node.dir, ratio: node.ratio, a: ser(node.a), b: ser(node.b) };
+  };
+  const data = {
+    active: state.tabs.indexOf(state.tab),
+    tabs: state.tabs.map((t) => ({
+      name: t.custom ? t.name : "", tree: ser(t.tree),
+      focus: t.focus && state.panes.get(t.focus) ? state.panes.get(t.focus).session.id : "",
+    })),
+  };
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(data)); } catch (_) { /* private mode */ }
+}
+
+function restoreLayout(alive) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "null"); } catch (_) { saved = null; }
+  const bySid = new Map(alive.map((s) => [s.id, s]));
+  const grow = (node, tab) => {
+    if (!node) return null;
+    if (node.type === "leaf") {
+      const info = bySid.get(node.session);
+      if (!info) return null;
+      bySid.delete(node.session);
+      const pane = new Pane(info);
+      pane.tab = tab.id;
+      state.panes.set(pane.id, pane);
+      if (node.session === tab.wantFocus) tab.focus = pane.id;
+      return leaf(pane.id);
+    }
+    const a = grow(node.a, tab), b = grow(node.b, tab);
+    if (!a) return b;
+    if (!b) return a;
+    return { type: "split", dir: node.dir, ratio: node.ratio, a, b };
+  };
+  let active = null;
+  if (saved && Array.isArray(saved.tabs)) {
+    saved.tabs.forEach((st, i) => {
+      const tab = addTab(st.name || "");
+      tab.wantFocus = st.focus;
+      tab.tree = grow(st.tree, tab);
+      delete tab.wantFocus;
+      if (!tab.tree) { dropTab(tab); return; }
+      if (!tab.focus) tab.focus = firstLeaf(tab.tree).pane;
+      if (i === saved.active) active = tab;
+    });
+  }
+  // Anything running that the saved layout does not know: one tab each, so
+  // a connection still gets a tab of its own.
+  for (const info of bySid.values()) {
+    const tab = addTab();
+    const pane = new Pane(info);
+    pane.tab = tab.id;
+    state.panes.set(pane.id, pane);
+    tab.tree = leaf(pane.id);
+    tab.focus = pane.id;
+  }
+  state.tab = active || state.tabs[0] || null;
+  render();
+  const pane = state.focus && state.panes.get(state.focus);
+  if (pane) pane.term.focus();
 }
 
 function setSync(on) {
@@ -622,12 +1002,14 @@ function openDrawer(tab) {
   if (tab) state.drawerTab = tab;
   $("#drawer").hidden = false;
   $("#drawerScrim").hidden = false;
-  $(".launcher").hidden = state.drawerTab === "colors";
+  $(".launcher").hidden = state.drawerTab === "colors" || state.drawerTab === "commands";
+  $("#cmdFilterBar").hidden = state.drawerTab !== "commands";
   for (const b of document.querySelectorAll(".drawer-tabs button")) {
     b.classList.toggle("on", b.dataset.tab === state.drawerTab);
   }
   refreshDrawer();
-  if (state.drawerTab !== "colors") $("#newCommand").focus();
+  if (state.drawerTab === "commands") $("#cmdSearch").focus();
+  else if (state.drawerTab !== "colors") $("#newCommand").focus();
 }
 
 function closeDrawer() {
@@ -643,8 +1025,10 @@ const ago = (ts) => {
   return Math.round(s / 86400) + "d ago";
 };
 
-async function refreshDrawer() {
+async function refreshDrawer(poll = false) {
   if ($("#drawer").hidden) return;
+  if (state.drawerTab === "commands") return renderCommands();
+  if (state.drawerTab === "servers") return poll ? undefined : renderServers();
   // The legend never changes; redrawing it on the poll would fight the reader.
   if (state.drawerTab === "colors" && $("#drawerList").querySelector(".legend")) return;
   const host = clear($("#drawerList"));
@@ -690,7 +1074,7 @@ function savedRow(entry) {
       el("div", { class: "row-meta", text: entry.command })),
     el("div", { class: "row-actions" },
       el("button", { class: "btn sm primary",
-                     onClick: () => { openPane({ command: entry.command, cwd: entry.cwd, label: entry.name }); closeDrawer(); } },
+                     onClick: () => { openPane({ command: entry.command, cwd: entry.cwd, label: entry.name, newTab: true }); closeDrawer(); } },
         "Open"),
       el("button", { class: "btn sm danger", title: "Forget",
                      onClick: async () => { await post("/api/history/forget", { name: entry.name }); refreshDrawer(); } },
@@ -709,7 +1093,7 @@ function historyRow(entry) {
     status,
     el("div", { class: "row-actions" },
       el("button", { class: "btn sm",
-                     onClick: () => { openPane({ command: entry.command, cwd: entry.cwd }); closeDrawer(); } },
+                     onClick: () => { openPane({ command: entry.command, cwd: entry.cwd, newTab: true }); closeDrawer(); } },
         "Again")));
 }
 
@@ -736,6 +1120,7 @@ function liveRow(s) {
 function attachExisting(info) {
   // The session already exists; this only builds a view onto it. Everything it
   // printed while nobody was watching is replayed by the backend on attach.
+  if (!state.tab) addTab();
   const pane = new Pane(info);
   state.panes.set(pane.id, pane);
   state.tree = state.tree
@@ -744,6 +1129,145 @@ function attachExisting(info) {
   state.focus = pane.id;
   render();
   pane.term.focus();
+}
+
+/* ------------------------------------------------- commands sent, servers */
+
+function showCommandsFor(pane) {
+  state.cmdFilter = { session: pane.session.id, connection: "",
+                      label: pane.session.label || pane.session.command || "this pane" };
+  openDrawer("commands");
+}
+
+function showCommandsOn(connection) {
+  state.cmdFilter = { session: "", connection, label: connection };
+  openDrawer("commands");
+}
+
+const clock = (t) => {
+  const d = new Date(t * 1000);
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString() : d.toLocaleString();
+};
+
+async function renderCommands() {
+  const f = state.cmdFilter;
+  const chip = $("#cmdScope");
+  clear(chip);
+  if (f.session || f.connection) {
+    chip.append(el("span", { class: "pill live", text: (f.connection ? "server " : "pane ") + f.label }),
+      el("button", { class: "btn sm", title: "Show every pane",
+                     onClick: () => { state.cmdFilter = { session: "", connection: "", label: "" }; renderCommands(); } },
+        "all panes"));
+  } else {
+    const pane = state.focus && state.panes.get(state.focus);
+    chip.append(el("span", { class: "pill", text: "every pane" }),
+      pane ? el("button", { class: "btn sm", onClick: () => showCommandsFor(pane) }, "this pane") : null);
+  }
+  const q = $("#cmdSearch").value.trim();
+  const qs = new URLSearchParams({ limit: "400" });
+  if (f.session) qs.set("session", f.session);
+  if (f.connection) qs.set("connection", f.connection);
+  if (q) qs.set("q", q);
+  let rows;
+  try {
+    rows = (await api("/api/commands?" + qs)).commands || [];
+  } catch (e) {
+    $("#drawerList").replaceChildren(el("p", { class: "hint", text: "Could not load: " + e.message }));
+    return;
+  }
+  if (state.drawerTab !== "commands" || $("#drawer").hidden) return;
+  const frag = document.createDocumentFragment();
+  if (!rows.length) {
+    frag.append(el("p", { class: "hint" }, q ? "Nothing matches." :
+      "No commands yet. Each line you run in a pane is listed here as it was sent."));
+  }
+  for (const c of rows) frag.append(commandRow(c));
+  frag.append(el("p", { class: "hint" },
+    "Read off the screen when Enter is pressed, so it is what the shell received after completion and history. " +
+    "Lines nothing echoed — passwords — are never recorded, and ", el("kbd", {}, "--password"),
+    "-style secrets are blanked before saving."));
+  $("#drawerList").replaceChildren(frag);
+}
+
+function commandRow(c) {
+  const where = c.connection || c.pane || "";
+  return el("div", { class: "row cmd-row" },
+    el("div", { class: "row-main" },
+      el("div", { class: "row-cmd mono", title: c.command, text: c.command }),
+      el("div", { class: "row-meta" },
+        clock(c.t), where ? " · " : "", where,
+        c.how && c.how !== "typed" ? el("span", { class: "pill cmd-how", text: c.how }) : null)),
+    el("div", { class: "row-actions" },
+      el("button", { class: "btn sm", title: "Put it on the focused pane's prompt, unsent",
+                     onClick: () => { insertCommand(c.command); closeDrawer(); } }, "Insert"),
+      el("button", { class: "btn sm", title: "Copy",
+                     onClick: () => navigator.clipboard?.writeText(c.command).then(
+                       () => toast("Copied", { body: c.command, severity: "ok" })) }, "Copy")));
+}
+
+async function renderServers() {
+  let rows;
+  try {
+    rows = (await api("/api/connections")).connections || [];
+  } catch (e) {
+    $("#drawerList").replaceChildren(el("p", { class: "hint", text: "Could not load: " + e.message }));
+    return;
+  }
+  if (state.drawerTab !== "servers" || $("#drawer").hidden) return;
+  const frag = document.createDocumentFragment();
+  if (!rows.length) {
+    frag.append(el("p", { class: "hint" },
+      "No servers yet. Every ", el("kbd", {}, "ssh"), " connection opened here is listed, with when and how often."));
+  }
+  for (const s of rows) frag.append(serverRow(s));
+  $("#drawerList").replaceChildren(frag);
+}
+
+const span = (a, b) => {
+  const s = Math.max(0, Math.round((b || Date.now() / 1000) - a));
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.round(s / 60) + "m";
+  return (s / 3600).toFixed(1) + "h";
+};
+
+function serverRow(s) {
+  const forget = el("button", { class: "btn sm danger", title: "Forget this server's connection history",
+    onClick: async (e) => {
+      if (!forget.classList.contains("arm")) {
+        forget.classList.add("arm"); forget.textContent = "forget?";
+        setTimeout(() => { forget.classList.remove("arm"); forget.textContent = "×"; }, 3000);
+        return;
+      }
+      e.stopPropagation();
+      await post("/api/connections/forget", { connection: s.connection });
+      renderServers();
+    } }, "×");
+  const facts = [s.hostname && s.hostname !== s.host ? s.hostname : "", s.os_name || "",
+                 (s.addresses || []).slice(0, 2).join(", ")].filter(Boolean).join(" · ");
+  const sessions = el("div", { class: "srv-sessions" },
+    ...(s.sessions || []).map((x) => el("div", { class: "srv-session" },
+      el("span", { text: clock(x.started) }),
+      el("span", { class: "row-meta", text: x.ended ? `${span(x.started, x.ended)}${x.exit_code ? " · exit " + x.exit_code : ""}` : "running" }))));
+  return el("details", { class: "row srv-row" },
+    el("summary", {},
+      el("div", { class: "row-main" },
+        el("div", { class: "row-cmd" }, el("b", { text: s.connection })),
+        el("div", { class: "row-meta" },
+          facts ? facts + " · " : "",
+          `${s.count} connection${s.count === 1 ? "" : "s"} · last ${ago(s.last)} · first ${new Date(s.first * 1000).toLocaleDateString()}`)),
+      s.live ? el("span", { class: "pill live", text: `${s.live} open` }) : null,
+      s.commands ? el("span", { class: "pill", text: `${s.commands} cmd` }) : null,
+      el("div", { class: "row-actions" },
+        el("button", { class: "btn sm primary", title: s.command,
+                       onClick: (e) => { e.preventDefault(); openPane({ command: s.command, label: s.label || "", newTab: true }); closeDrawer(); } },
+          "Connect"),
+        el("button", { class: "btn sm", onClick: (e) => { e.preventDefault(); showCommandsOn(s.connection); } }, "Commands"),
+        forget)),
+    el("div", { class: "srv-body" },
+      el("div", { class: "row-meta mono", text: s.command }),
+      s.uid ? el("div", { class: "row-meta", text: `Known to the server tools as ${s.uid}${s.events ? ` · ${s.events} report(s) in its history` : ""}` }) : null,
+      sessions));
 }
 
 /* -------------------------------------------------------------------- wire */
@@ -898,7 +1422,7 @@ function insertCommand(command) {
   }
   // No trailing newline, and pane.send rather than sendInput: this puts the
   // command on the prompt for a human to run, in one pane, deliberately.
-  pane.send({ t: "in", d: command });
+  if (pane.send({ t: "in", d: command })) pane.track(command);
   pane.term.focus();
   toast("Inserted", { body: "Press Enter to run it.", severity: "ok" });
 }
@@ -1014,6 +1538,21 @@ function wire() {
   }, true);
 
   $("#btnNew").onclick = () => openPane({});
+  $("#btnTabNew").onclick = () => openPane({ newTab: true });
+  $("#btnTabConnect").onclick = () => openDrawer("servers");
+  let searchTimer = null;
+  $("#cmdSearch").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderCommands, 200); };
+  $("#btnCmdClear").onclick = async () => {
+    const b = $("#btnCmdClear");
+    if (!b.classList.contains("arm")) {
+      b.classList.add("arm"); b.textContent = "clear all?";
+      setTimeout(() => { b.classList.remove("arm"); b.textContent = "Clear"; }, 3000);
+      return;
+    }
+    b.classList.remove("arm"); b.textContent = "Clear";
+    await post("/api/commands/clear");
+    renderCommands();
+  };
   $("#btnFirst").onclick = () => openPane({});
   $("#btnSplitV").onclick = () => splitPane(state.focus, "v");
   $("#btnSplitH").onclick = () => splitPane(state.focus, "h");
@@ -1043,7 +1582,7 @@ function wire() {
 
   $("#btnLaunch").onclick = () => {
     const command = $("#newCommand").value.trim();
-    openPane({ command });
+    openPane({ command, newTab: true });
     $("#newCommand").value = "";
     closeDrawer();
   };
@@ -1088,11 +1627,20 @@ function wire() {
       s: () => setSync(!state.sync),
       h: () => ($("#drawer").hidden ? openDrawer() : closeDrawer()),
       w: () => state.focus && closePane(state.focus),
+      t: () => openPane({ newTab: true }),
+      l: () => (state.focus && state.panes.get(state.focus) ? showCommandsFor(state.panes.get(state.focus)) : openDrawer("commands")),
       enter: () => openPane({}),
     };
     const fn = map[key === "enter" ? "enter" : key];
     if (fn) { e.preventDefault(); fn(); }
   });
+  // Tabs: Ctrl+PageUp / PageDown, as in most terminals. Not Alt+digit:
+  // full-screen programs (irssi, weechat, mc) use those.
+  addEventListener("keydown", (e) => {
+    if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === "PageUp" || e.key === "PageDown")) {
+      e.preventDefault(); cycleTab(e.key === "PageUp" ? -1 : 1);
+    }
+  }, true);
 }
 
 async function boot() {
@@ -1122,7 +1670,7 @@ async function boot() {
     const { sessions } = await api("/api/sessions");
     const alive = (sessions || []).filter((s) => s.alive);
     if (alive.length) {
-      for (const s of alive) attachExisting(s);
+      restoreLayout(alive);
       toast(`Reattached ${alive.length} session(s)`, { severity: "ok" });
     } else {
       await openPane({});
@@ -1130,7 +1678,15 @@ async function boot() {
   } catch (_) {
     await openPane({});
   }
-  setInterval(() => refreshDrawer(), 4000);
+  setInterval(() => refreshDrawer(true), 4000);
+  // Keep the title bars current: a pane that printed something since its
+  // last look is looked at again. Only the tab on screen -- nobody is
+  // reading the others.
+  setInterval(() => {
+    for (const p of tabPanes(state.tab)) {
+      if (!p.dead && p.outputAt > p.whereAt && Date.now() - p.whereAt > 20_000) p.fetchWhere();
+    }
+  }, 5000);
 }
 
 boot();

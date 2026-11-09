@@ -47,8 +47,34 @@ question box and nothing else.
 collapses its parent back into its sibling instead of leaving a hole. Drag any
 divider to re-balance.
 
+**Tabs, one per connection.** A connection opened from the drawer or with
+**⇄ connect…** gets a tab of its own, each with its own splits; **+** opens a
+tab with a local shell and **+ Pane** splits inside the tab on screen. Tabs in
+the background keep running. Double-click a tab to name it; closing one that
+still has live terminals takes a second click. The layout is remembered, so a
+reload comes back to the same tabs and splits.
+
+**Where every pane is.** Each pane's bar shows the host, its IP address and the
+directory the shell is in — kept current as you work. For a local pane that is
+the terminal's foreground process; for an SSH pane it is asked of the server
+over the pane's own connection, with nothing to set up in the remote shell. A
+shell that reports its directory itself (OSC 7) is believed first. Click the
+directory to copy it.
+
+**Commands sent, kept.** Every command line run in a pane is recorded with the
+time, the pane and the server — read off the screen as Enter is pressed, so it
+is what the shell actually received after tab-completion and history recall.
+**⌘** on a pane, or the **Commands** tab, lists them, searchable, with
+**Insert** to put one back on a prompt unsent. Lines that were not echoed
+(passwords) are never recorded, and `--password`-style secrets are blanked.
+
+**Servers connected to.** The **Servers** tab lists every SSH destination
+opened here: how many times, first and last connection, each session's start
+and length, how many commands were sent, and what the server tools know about
+it. **Connect** opens it again in a new tab.
+
 **Broadcast.** Turn it on and every keystroke goes to every pane at once —
-tmux's `synchronize-panes`. The chrome turns amber and stays amber, because
+tmux's `synchronize-panes` — within the tab on screen. The chrome turns amber and stays amber, because
 forgetting it is on is how you run a command on nine machines you meant to run
 on one. The **send to all** bar next to it is the deliberate one-shot: type a
 line, press Enter, it lands in every pane.
@@ -135,6 +161,9 @@ is the same: the package list is shown before it leaves the machine.
 | `Ctrl+Shift+H` | connections drawer |
 | `Ctrl+Shift+A` | ask bar on/off |
 | `Ctrl+Shift+X` | server tools for the focused SSH pane |
+| `Ctrl+Shift+T` | new tab |
+| `Ctrl+PageUp` / `PageDown` | previous / next tab |
+| `Ctrl+Shift+L` | commands sent to the focused pane |
 
 `Ctrl+Shift+…` rather than a tmux prefix key: a prefix has to be intercepted
 before the terminal sees it, and stealing a keystroke is how you break the one
@@ -308,6 +337,7 @@ ares-terminal-console/
     ├── websocket.py     RFC 6455 framing, and the keep-alive ping
     ├── pty_session.py   PTYs (ConPTY on Windows), scrollback, the session registry
     ├── remote.py        an SSH pane's target, multiplexing, running probes over it
+    ├── where.py         host, address and directory of a pane
     ├── insight/         the server tools: probes, analysis, history (service.py)
     ├── history.py       history, saved connections, redaction
     ├── shell_env.py     the colour scheme and the ls/ll/la wrappers

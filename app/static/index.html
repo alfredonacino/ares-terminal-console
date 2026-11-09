@@ -76,6 +76,14 @@
   <button class="icon-btn sm" id="btnCloseSend" title="Hide">×</button>
 </div>
 
+<!-- Tabs: one workspace each, with its own splits. A new connection opens
+     in a tab of its own; + Pane works inside the tab on screen. -->
+<nav class="tabbar" id="tabBar" aria-label="Tabs">
+  <div class="tab-list" id="tabList" role="tablist"></div>
+  <button class="tab-add" id="btnTabNew" title="New tab with a local shell (Ctrl+Shift+T)">+</button>
+  <button class="tab-add tab-connect" id="btnTabConnect" title="Connect to a server in a new tab">⇄ connect…</button>
+</nav>
+
 <main id="stage">
   <div id="layout" class="layout"></div>
   <div class="empty" id="emptyState">
@@ -127,13 +135,15 @@
   <div class="drawer-head">
     <div>
       <h2>Connections</h2>
-      <p>Everything opened here, newest first. Saved ones stay at the top.</p>
+      <p>Everything opened here, the servers reached and the commands sent to them.</p>
     </div>
     <button class="icon-btn" id="btnDrawerClose" title="Close">×</button>
   </div>
   <div class="drawer-tabs">
     <button class="on" data-tab="saved">Saved</button>
     <button data-tab="history">History</button>
+    <button data-tab="servers">Servers</button>
+    <button data-tab="commands">Commands</button>
     <button data-tab="live">Running</button>
     <button data-tab="colors">Colours</button>
   </div>
@@ -143,6 +153,12 @@
              placeholder="ssh user@host  —  blank for a shell">
       <button class="btn primary sm" id="btnLaunch">Open</button>
       <button class="btn sm" id="btnSave" title="Keep this command under a name">Save</button>
+    </div>
+    <div class="cmd-filter" id="cmdFilterBar" hidden>
+      <input id="cmdSearch" type="search" autocomplete="off" spellcheck="false"
+             placeholder="search commands sent">
+      <button class="btn sm danger" id="btnCmdClear" title="Forget every recorded command">Clear</button>
+      <div class="cmd-scope" id="cmdScope"></div>
     </div>
     <div id="drawerList"></div>
   </div>
@@ -201,6 +217,10 @@
         <h3>Keyboard</h3>
         <dl class="keys">
           <dt>Ctrl+Shift+A</dt><dd>show or hide the ask bar</dd>
+          <dt>Ctrl+Shift+T</dt><dd>new tab with a local shell</dd>
+          <dt>Ctrl+PageUp / PageDown</dt><dd>previous / next tab</dd>
+          <dt>Ctrl+Shift+L</dt><dd>commands sent to the focused pane</dd>
+          <dt>Ctrl+Shift+X</dt><dd>server tools for the focused SSH pane</dd>
           <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Enter</kbd></dt>
           <dd>New pane.</dd>
           <dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></dt>

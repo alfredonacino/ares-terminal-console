@@ -201,6 +201,7 @@ class Insight:
         self.history = history
         self.lock = threading.Lock()
         self.identity = None
+        self._where, self._where_at = None, 0.0
         self.monitor = health.HealthMonitor()
         self.perf = None
         self.perf_cancel = None
@@ -266,6 +267,27 @@ class Insight:
                                                             self.identity.source)
         out["connection"] = self.connection
         return out
+
+    # ----------------------------------------------------------- where
+    def where(self) -> dict:
+        """Host, address and the pane's directory, for its title bar. Quick
+        and quiet: a failure is an empty answer, never an error on screen."""
+        from app import where as where_mod
+        now = time.monotonic()
+        if self._where and now - self._where_at < 1.0:
+            return self._where
+        try:
+            code, out, err = self.runner.run_input("sh -s", where_mod.REMOTE_SCRIPT, timeout=12)
+        except OSError:
+            code, out, err = 255, "", ""
+        found = where_mod.parse_remote(out)
+        if not found["host"] and self.identity is not None:
+            found["host"] = getattr(self.identity, "hostname", "") or ""
+        found["connection"] = self.connection
+        if code != 0 and not found["host"]:
+            found["error"] = remote.explain(err)
+        self._where, self._where_at = found, now
+        return found
 
     # ---------------------------------------------------------- health
     def health(self) -> dict:

@@ -14,6 +14,12 @@ machine is already in a bad way and "pip install first" is the wrong answer.
     POST /api/history/save     keep one                  {name, command, cwd}
     POST /api/history/forget   drop one                  {name}
     POST /api/history/clear
+    GET  /api/sessions/<id>/where      host, address and directory of a pane
+    POST /api/sessions/<id>/command    log a command line sent to it  {command, how}
+    GET  /api/commands                 commands sent  ?session=&connection=&q=
+    POST /api/commands/clear
+    GET  /api/connections              every SSH destination connected to
+    POST /api/connections/forget       drop one                  {connection}
 
 Framing is the one rule this app inherits from the suite: standalone it refuses
 to be framed at all, and under ApexBuild it names exactly the one loopback
@@ -38,7 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import agent, pty_session, shell_env, sso       # noqa: E402
+from app import agent, pty_session, shell_env, sso, where  # noqa: E402
 from app.history import History                          # noqa: E402
 from app.insight import service as insight_service        # noqa: E402
 from app.websocket import WebSocket, WebSocketClosed, is_upgrade  # noqa: E402
@@ -373,6 +379,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, **agent.state(refresh=self._q1("refresh") == "1")})
         if path == "/api/agent/costs":
             return self._json({"ok": True, **LEDGER.analysis()})
+        if path == "/api/commands":
+            return self._json({"ok": True, "commands": HISTORY.commands(
+                session_id=self._q1("session") or "", connection=self._q1("connection") or "",
+                query=self._q1("q") or "", limit=int(self._q1("limit") or 500))})
+        if path == "/api/connections":
+            return self._json({"ok": True, "connections": self._connections()})
+        if path.startswith("/api/sessions/") and path.endswith("/where"):
+            return self._where(path.split("/")[3])
         if path == "/api/servers":
             return self._json({"ok": True, "servers": SERVERS.servers()})
         if path.startswith("/api/servers/"):
@@ -411,6 +425,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": False, "error": str(e)}, status=500)
             HISTORY.record(session.id, command or pty_session.DEFAULT_SHELL,
                            cwd=session.cwd, label=str(body.get("label") or ""))
+            _watch_end(session)
+            HISTORY.note_connection(session.id, session.ssh_label(), command,
+                                    label=str(body.get("label") or ""))
             log("INFO", f"session {session.id} <- {command or pty_session.DEFAULT_SHELL}")
             return self._json({"ok": True, "session": session.info()})
 
@@ -420,6 +437,20 @@ class Handler(BaseHTTPRequestHandler):
             INSIGHT.drop(parts[2])
             return self._json({"ok": ok})
 
+        if len(parts) == 4 and parts[1] == "sessions" and parts[3] == "command":
+            session = REGISTRY.get(parts[2])
+            if session is None:
+                return self._json({"ok": False, "error": "That pane has closed."}, status=404)
+            entry = HISTORY.log_command(session.id, str(body.get("command") or ""),
+                                        pane=session.label or session.command,
+                                        connection=session.ssh_label(),
+                                        how=str(body.get("how") or "typed")[:20])
+            return self._json({"ok": True, "entry": entry})
+        if path == "/api/commands/clear":
+            HISTORY.clear_commands()
+            return self._json({"ok": True})
+        if path == "/api/connections/forget":
+            return self._json({"ok": HISTORY.forget_server(str(body.get("connection") or ""))})
         if path.startswith("/api/insight/"):
             return self._insight(path, body)
         if len(parts) == 4 and parts[1] == "servers" and parts[3] == "forget":
@@ -464,6 +495,39 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({"ok": False, "error": "unknown endpoint"}, status=404)
 
     # ------------------------------------------------------------ server tools
+
+    def _where(self, sid: str):
+        session = REGISTRY.get(sid)
+        if session is None:
+            return self._json({"ok": False, "error": "That pane has closed."}, status=404)
+        try:
+            if session.ssh_label():
+                out = INSIGHT.get(session).where()
+            else:
+                out = where.local(session)
+        except Exception as e:          # the title bar is a nicety, never a trace
+            out = {"host": "", "ip": "", "cwd": "", "error": str(e)[:200]}
+        return self._json({"ok": True, **out})
+
+    def _connections(self) -> list:
+        """The servers connected to, with what the server tools learned about
+        each (its name, OS and history) when they have been opened on it."""
+        known = {}
+        for s in SERVERS.servers():
+            for c in s.get("connections", []):
+                known.setdefault(c, s)
+        live = {}
+        for s in REGISTRY.list():
+            if s.get("alive") and s.get("ssh"):
+                live[s["ssh"]] = live.get(s["ssh"], 0) + 1
+        rows = HISTORY.servers()
+        for row in rows:
+            s = known.get(row["connection"])
+            if s:
+                row.update(uid=s.get("uid"), hostname=s.get("hostname"), os_name=s.get("os_name"),
+                           addresses=s.get("addresses") or [], events=s.get("events", 0))
+            row["live"] = live.get(row["connection"], 0)
+        return rows
 
     def _insight(self, path: str, body: dict):
         """/api/insight/<session>/<tool>[/<step>] -- see app/insight/service.py.
@@ -682,6 +746,13 @@ class Server(ThreadingHTTPServer):
         if isinstance(exc, (BrokenPipeError, ConnectionResetError, WebSocketClosed)):
             return   # a browser closing a tab is not an error
         super().handle_error(request, client_address)
+
+
+def _watch_end(session) -> None:
+    """Close the session's history entries when its process ends."""
+    session.on_end = lambda s: HISTORY.finish(s.id, s.exit_code)
+    if session.ended is not None:      # it ended before the hook was set
+        HISTORY.finish(session.id, session.exit_code)
 
 
 def _reaper():

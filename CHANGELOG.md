@@ -5,6 +5,11 @@
 - The tools run read-only scripts over the pane's own SSH connection (OpenSSH multiplexing), so a password or one-time code is typed once, in the pane.
 - Servers are recognised by machine identity, or by SSH host key fingerprint, and their history is kept across sessions.
 - AI analysis of logs and performance shows exactly what will be sent and sends it only on "Send to Claude", through the Claude Code subscription; vulnerability lookups on OSV.dev ask first too.
+- Tabs: each connection opens in a tab of its own with its own splits (+ for a local shell, ⇄ connect… for a server, Ctrl+Shift+T, Ctrl+PageUp/PageDown). Tabs can be renamed, and the layout survives a reload. Broadcast is limited to the tab on screen.
+- Each pane's bar shows the host, IP address and current directory, for local and SSH panes alike.
+- Commands sent to each pane are recorded (time, pane, server) and listed in the new Commands tab and under ⌘ on a pane, searchable, with Insert and Copy. Passwords are never recorded.
+- The new Servers tab lists every SSH destination connected to, with connection count, first and last time, sessions and commands sent, and reconnects in a new tab.
+- History entries now record when a session ended and its exit code.
 - Fixed: a closing terminal could raise a TypeError in its reader thread.
 - The window has the ARES icon, and the top bar reads ARES TERMINAL CONSOLE.
 

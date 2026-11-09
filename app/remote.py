@@ -167,15 +167,15 @@ class Runner:
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 creationflags=flags)
 
-    def run_input(self, command: str, stdin: str):
+    def run_input(self, command: str, stdin: str, timeout: float = PROBE_TIMEOUT):
         """(status, stdout, stderr) of `command` with `stdin` fed to it."""
         proc = self._popen(command)
         try:
-            out, err = proc.communicate((stdin or "").encode(), timeout=PROBE_TIMEOUT)
+            out, err = proc.communicate((stdin or "").encode(), timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
             out, err = proc.communicate()
-            err += b"\n(timed out after %d s)" % PROBE_TIMEOUT
+            err += b"\n(timed out after %d s)" % timeout
         return proc.returncode, out.decode("utf-8", "replace"), _clean(err)
 
     def stream_input(self, command: str, stdin: str, on_output, cancel: threading.Event,

@@ -239,7 +239,7 @@ body.syncing .pane.focus {
 .pane-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime);
             box-shadow: 0 0 8px var(--lime); flex: 0 0 auto; }
 .pane.dead .pane-dot { background: var(--ink-faint); box-shadow: none; }
-.pane-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis;
+.pane-title { flex: 0 1 auto; max-width: 34%; overflow: hidden; text-overflow: ellipsis;
               white-space: nowrap; color: var(--ink-dim); }
 .pane-tag {
   font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase;
@@ -691,3 +691,121 @@ kbd {
 .ins-tile, .ins-meter, .ins-chart-box { min-width: 0; }
 .ins-tile .v, .ins-tile .s { overflow-wrap: anywhere; }
 .ins-table a { white-space: nowrap; }
+
+
+/* ---------- tabs -------------------------------------------------------- */
+
+.tabbar {
+  position: relative; z-index: 12; flex: 0 0 auto;
+  display: flex; align-items: flex-end; gap: 4px;
+  padding: 6px 10px 0; min-width: 0;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(10, 14, 27, .55), rgba(10, 14, 27, .9));
+}
+.tab-list { display: flex; gap: 3px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tab-list::-webkit-scrollbar { display: none; }
+.tab {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+  max-width: 240px; padding: 5px 6px 5px 10px; cursor: pointer; user-select: none;
+  border: 1px solid var(--line); border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: rgba(10, 14, 27, .7); color: var(--ink-faint); font-size: 11px;
+  transition: color .14s var(--ease), background .14s var(--ease);
+}
+.tab:hover { color: var(--ink); }
+.tab.on {
+  color: var(--ink); background: #05070e;
+  border-color: color-mix(in srgb, var(--cyan) 55%, var(--line));
+  box-shadow: 0 -6px 18px -10px var(--cyan); margin-bottom: -1px; padding-bottom: 6px;
+}
+.tab-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lime);
+           box-shadow: 0 0 6px var(--lime); flex: 0 0 auto; }
+.tab-dot.dead { background: var(--ink-faint); box-shadow: none; }
+.tab-kind { color: var(--ink-faint); font-size: 10px; }
+.tab.ssh .tab-kind { color: var(--cyan); }
+.tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tab-count { font-size: 9px; padding: 0 5px; border-radius: 999px; border: 1px solid var(--line);
+             color: var(--ink-dim); }
+.tab-x {
+  flex: 0 0 auto; border: none; background: none; color: var(--ink-faint); cursor: pointer;
+  font: inherit; font-size: 12px; line-height: 1; padding: 1px 4px; border-radius: 4px;
+}
+.tab-x:hover { color: var(--ink); background: rgba(255, 255, 255, .06); }
+.tab-x.arm { color: var(--red); font-size: 10px; border: 1px solid rgba(255, 56, 96, .5); }
+.tab-rename {
+  width: 130px; font: inherit; font-size: 11px; color: var(--ink);
+  background: rgba(4, 5, 11, .9); border: 1px solid var(--cyan); border-radius: 4px; padding: 0 4px;
+}
+.tab-add {
+  flex: 0 0 auto; margin-bottom: 4px; padding: 2px 9px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-dim); font: inherit; font-size: 12px;
+}
+.tab-add:hover { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 50%, var(--line)); }
+.tab-connect { font-size: 10.5px; color: var(--cyan); }
+
+/* ---------- where a pane is -------------------------------------------- */
+
+.pane-where { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; }
+.pw {
+  flex: 0 0 auto; padding: 0 6px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--line); background: rgba(20, 28, 56, .5); font-size: 9.5px; color: var(--ink-dim);
+}
+.pw-host { color: var(--lime); border-color: rgba(57, 255, 136, .3); }
+.pw-ip { color: var(--violet); border-color: rgba(177, 76, 255, .35); }
+/* A long path loses its start, not its end: the directory you are in is the
+   part that matters. */
+.pw-cwd {
+  flex: 0 1 auto; min-width: 40px; overflow: hidden; text-overflow: ellipsis;
+  direction: rtl; text-align: left; cursor: copy;
+  color: var(--cyan); border-color: rgba(0, 240, 255, .3);
+}
+.pw-cwd bdi { direction: ltr; unicode-bidi: isolate; }
+.pane-cmds {
+  flex: 0 0 auto; border: 1px solid var(--line); background: none; color: var(--ink-dim);
+  border-radius: 999px; font: inherit; font-size: 10px; padding: 0 6px; cursor: pointer;
+}
+.pane-cmds:hover { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); }
+.pane-tools { margin-left: 0; }
+
+/* ---------- commands and servers in the drawer ------------------------- */
+
+.cmd-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+.cmd-filter input {
+  flex: 1 1 200px; min-width: 0; padding: 6px 9px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: rgba(4, 5, 11, .85); color: var(--ink); font: inherit; font-size: 12px;
+}
+.cmd-filter input:focus { outline: none; border-color: var(--cyan); }
+.cmd-scope { flex: 1 0 100%; display: flex; gap: 6px; align-items: center; }
+.btn.arm { color: var(--red); border-color: rgba(255, 56, 96, .6); }
+.mono { font-family: var(--mono); }
+.cmd-row .row-cmd { color: #eaf6ff; }
+.cmd-how { margin-left: 6px; }
+details.srv-row { display: block; padding: 0; }
+.srv-row > summary {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; list-style: none;
+}
+.srv-row > summary::-webkit-details-marker { display: none; }
+.srv-row > summary::before { content: "▸"; color: var(--ink-faint); font-size: 10px; }
+.srv-row[open] > summary::before { content: "▾"; color: var(--cyan); }
+.srv-body { padding: 0 12px 10px 28px; display: grid; gap: 6px; }
+.srv-body .mono { overflow-wrap: anywhere; }
+.srv-sessions { display: grid; gap: 2px; font-size: 10.5px; color: var(--ink-dim); }
+.srv-session { display: flex; justify-content: space-between; gap: 10px;
+               border-top: 1px dashed var(--line-soft); padding-top: 2px; }
+
+.pill { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .tab { max-width: 150px; }
+  .tab-connect { display: none; }
+  .pw-ip { display: none; }
+  /* The host and directory say more than the command on a narrow screen. */
+  .pane-title { display: none; }
+  /* The top bar scrolls sideways rather than wrapping under the tabs. */
+  .topbar { gap: 8px; }
+  .brand { flex: 0 0 auto; }
+  .bar-tools { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
+  .bar-tools::-webkit-scrollbar { display: none; }
+  .srv-row > summary { flex-wrap: wrap; }
+}
