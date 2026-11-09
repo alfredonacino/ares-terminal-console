@@ -120,7 +120,15 @@ A pane running `ssh …` gets a **◈ server** button (or `Ctrl+Shift+X`). It op
 seven tools for the machine on the other end, brought over from ARES Ultimate
 Console and TractorBeam. Any other pane gets **◈ system**, which opens the same
 seven tools for this computer, running the same read-only scripts in the local
-shell (the one exception: its Stop refuses the app's own process):
+shell (the one exception: its Stop refuses the app's own process).
+
+The tools also follow an `ssh` typed into a local pane: while that pane's
+shell is logged in to a server, the button reads **◈ server** and every tool
+works on that server; after `exit` they are back on this computer. Local
+panes get a small `ssh` wrapper on PATH (beside the `ls` colour wrappers)
+that adds the same connection sharing as ⇄ connect, so a password or
+one-time code typed in the pane is reused rather than asked for again. It
+only does so for an interactive login; git, rsync and scripts get plain ssh.
 
 | | |
 | --- | --- |

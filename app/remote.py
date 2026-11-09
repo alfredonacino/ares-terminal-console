@@ -136,6 +136,21 @@ def pane_argv(command: str):
             "-o", "ControlPersist=60"] + argv[1:]
 
 
+def strip_ours(argv: list) -> list:
+    """argv without the multiplexing options this app adds (pane_argv, and the
+    ssh wrapper on a local pane's PATH), so a probe built from a running ssh
+    is the plain command the user typed: Runner adds ControlMaster=no itself."""
+    ours = {"ControlMaster=auto", f"ControlPath={control_path()}", "ControlPersist=60"}
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] == "-o" and i + 1 < len(argv) and argv[i + 1] in ours:
+            i += 2
+            continue
+        out.append(argv[i])
+        i += 1
+    return out
+
+
 def label(target: dict) -> str:
     dest = target["destination"]
     if target.get("user") and "@" not in dest:

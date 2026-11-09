@@ -180,6 +180,7 @@ class Pane {
                               title: "Current directory — click to copy",
                               onClick: (e) => { e.stopPropagation(); this.copyCwd(); } }, this.cwdText);
     this.whereEl = el("span", { class: "pane-where" }, this.hostEl, this.ipEl, this.cwdEl);
+    this.showTools();
     queueMicrotask(() => this.showTitle());
     this.tagEl = el("span", { class: "pane-tag idle", hidden: true, text: "anti-idle" });
     this.dotEl = el("span", { class: "pane-dot" });
@@ -197,11 +198,7 @@ class Pane {
         this.tagEl,
         el("button", { class: "pane-cmds", title: "Commands sent to this pane",
                        onClick: (e) => { e.stopPropagation(); showCommandsFor(this); } }, "⌘"),
-        el("button", { class: "pane-tools",
-                       title: (this.session.ssh ? `Server tools for ${this.session.ssh}`
-                                                : "System tools for this computer") + " (Ctrl+Shift+X)",
-                       onClick: (e) => { e.stopPropagation(); openInsight(this); } },
-           this.session.ssh ? "◈ server" : "◈ system"),
+        this.toolsEl,
         el("button", { class: "icon-btn", title: "Split vertical",
                        onClick: (e) => { e.stopPropagation(); splitPane(this.id, "v"); } }, "⬒"),
         el("button", { class: "icon-btn", title: "Close pane",
@@ -355,7 +352,21 @@ class Pane {
     this.showWhere();
   }
 
+  /* ◈ server on an SSH pane, or on a local pane whose shell has run `ssh`
+     (the tools follow it there); ◈ system on any other local pane. */
+  showTools() {
+    if (!this.toolsEl) {
+      this.toolsEl = el("button", { class: "pane-tools",
+        onClick: (e) => { e.stopPropagation(); openInsight(this); } });
+    }
+    const dest = this.session.ssh || (this.where && this.where.hop) || "";
+    this.toolsEl.textContent = dest ? "◈ server" : "◈ system";
+    this.toolsEl.title = (dest ? `Server tools for ${dest}` : "System tools for this computer") +
+      " (Ctrl+Shift+X)";
+  }
+
   showWhere() {
+    this.showTools();
     const w = this.where || {};
     const ssh = this.session.ssh || "";
     let host = w.host || (this.osc7 && this.osc7.host) || (ssh ? ssh.replace(/^.*@/, "").replace(/:\d+$/, "") : "");

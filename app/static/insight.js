@@ -63,13 +63,17 @@ function inline(s) {
 /* -------------------------------------------------------------- the sheet */
 
 /* "the server" or "this computer", for the words on screen. */
-function machine() { return ins.pane && !ins.pane.session.ssh ? "this computer" : "the server"; }
+function machine() {
+  if (ins.ident) return ins.ident.local ? "this computer" : "the server";
+  return ins.pane && !ins.pane.session.ssh && !(ins.pane.where && ins.pane.where.hop)
+    ? "this computer" : "the server";
+}
 
 function openInsight(pane, tool = "health") {
   if (!pane || !pane.session) return;
-  if (ins.sid !== pane.session.id) { ins.cache = {}; ins.ident = null; }
+  if (ins.sid !== pane.session.id) { ins.cache = {}; ins.ident = null; ins.conn = null; }
   ins.pane = pane; ins.sid = pane.session.id;
-  $("#insightTitle").textContent = pane.session.ssh || "This computer";
+  $("#insightTitle").textContent = pane.session.ssh || (pane.where && pane.where.hop) || "This computer";
   $("#insightIdent").textContent = "identifying…";
   $("#insightWrap").hidden = false;
   buildNav();
@@ -96,6 +100,10 @@ function buildNav() {
 async function identify() {
   try {
     const id = ins.ident = await iapi("identity");
+    // A local pane's shell went to a server, or came back: different machine.
+    if (ins.conn && ins.conn !== id.connection) ins.cache = {};
+    ins.conn = id.connection;
+    $("#insightTitle").textContent = id.local ? "This computer" : id.connection;
     $("#insightIdent").textContent =
       [id.hostname, id.os_name].filter(Boolean).join(" · ") || id.connection;
     $("#insightIdent").title = [`Identity: ${id.uid}`, `From: ${id.source_label}`,

@@ -138,16 +138,28 @@ def _argv_of(pid: int) -> list:
     return []
 
 
+def hop_command(session, fg: int = 0) -> str:
+    """The `ssh ...` a local pane's shell is running in the foreground, as a
+    command line, or "" when it is not running one. This is what the server
+    tools follow: type `ssh host` in a local pane and they work on that host."""
+    from app import remote
+    argv = _argv_of(fg or _foreground(session))
+    if not argv or os.path.basename(argv[0]).lower() not in ("ssh", "ssh.exe"):
+        return ""
+    import shlex
+    command = " ".join(shlex.quote(a) for a in remote.strip_ours(argv))
+    return command if remote.parse(command) else ""
+
+
 def local(session) -> dict:
     """Where a pane running on this machine is."""
     from app import remote
     out = {"host": local_host(), "ip": local_ip(), "cwd": "", "remote": False,
            "user": os.environ.get("USER") or os.environ.get("USERNAME") or ""}
     fg = _foreground(session)
-    argv = _argv_of(fg)
-    if argv and os.path.basename(argv[0]).lower() in ("ssh", "ssh.exe"):
-        import shlex
-        target = remote.parse(" ".join(shlex.quote(a) for a in argv))
+    hop = hop_command(session, fg)
+    if hop:
+        target = remote.parse(hop)
         if target:
             # The shell has hopped: the local directory is beside the point.
             dest = remote.label(target)

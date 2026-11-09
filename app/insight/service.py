@@ -204,6 +204,7 @@ def _own_pids() -> set:
 class Insight:
     def __init__(self, sid: str, command: str, history: ServerHistory):
         self.sid = sid
+        self.command = command
         self.target = remote.parse(command)
         # A pane that is not `ssh ...` gets the same tools for this computer.
         self.local = not self.target
@@ -288,6 +289,7 @@ class Insight:
         out["source_label"] = insight.ID_SOURCE_LABELS.get(self.identity.source,
                                                             self.identity.source)
         out["connection"] = self.connection
+        out["local"] = self.local
         return out
 
     # ----------------------------------------------------------- where
@@ -570,12 +572,31 @@ class Registry:
         self.items = {}
         self.lock = threading.Lock()
 
+    @staticmethod
+    def command_for(session) -> str:
+        """What the tools work on: the pane's own `ssh ...`; for a local pane,
+        an `ssh ...` typed into it while it runs; otherwise this computer."""
+        if session.ssh_label():
+            return session.command
+        from app import where
+        try:
+            return where.hop_command(session) or session.command
+        except Exception:
+            return session.command
+
     def get(self, session) -> Insight:
+        command = self.command_for(session)
+        stale = None
         with self.lock:
             item = self.items.get(session.id)
+            if item is not None and item.command != command:
+                # The shell hopped to a server, or came back: new machine, new tools.
+                stale, item = item, None
             if item is None:
-                item = self.items[session.id] = Insight(session.id, session.command, self.history)
-            return item
+                item = self.items[session.id] = Insight(session.id, command, self.history)
+        if stale and stale.perf_cancel:
+            stale.perf_cancel.set()
+        return item
 
     def drop(self, sid: str) -> None:
         with self.lock:

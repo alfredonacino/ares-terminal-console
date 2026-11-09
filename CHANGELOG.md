@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+- The server tools follow an `ssh` typed into a local pane: while the shell is logged in to a server, ◈ server and every tool work on that server over the pane's own login (a small `ssh` wrapper on local panes' PATH adds connection sharing for interactive logins); after `exit` they are back on this computer.
+- The wrapper directory is always put on PATH as an absolute path.
+
 ## [2.2.1]
 - The server tools now work on local panes too (◈ system, Ctrl+Shift+X): health & processes, performance, logs, AI log analysis, packages, vulnerability scan and history for this computer. Its Stop refuses the app's own process.
 

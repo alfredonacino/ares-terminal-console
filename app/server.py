@@ -813,7 +813,7 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
     log("INFO", f"{APP_NAME} {APP_VERSION} on {url}")
     log("INFO", f"history: {HISTORY.path}")
     if SHIMS:
-        log("INFO", "colour: " + ", ".join(f"{k} -> {v}" for k, v in SHIMS.items()))
+        log("INFO", "wrappers: " + ", ".join(f"{k} -> {v}" for k, v in SHIMS.items()))
     elif sys.platform != "win32":
         log("WARN", "no ls found; listings will not be coloured")
     if EMBED_ORIGIN:

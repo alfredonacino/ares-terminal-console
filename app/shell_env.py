@@ -175,7 +175,41 @@ def build_shims(bindir) -> dict:
         write("la", f'exec {shlex_quote(real_ls)} -lhA --color=auto "$@"\n',
               f"{real_ls} -lhA")
 
+    # ssh: share a connection typed into a local pane with the server tools,
+    # the way a pane opened with ⇄ connect does (see app/remote.py). Only for
+    # an interactive login -- git, rsync and scripts get plain ssh -- and only
+    # when the command does not choose its own multiplexing.
+    real_ssh = _real("ssh", bindir)
+    if real_ssh:
+        from app import remote
+        target = bindir / "ssh"
+        target.write_text(_SSH_SHIM.format(ssh=shlex_quote(real_ssh),
+                                           path=shlex_quote(remote.control_path())),
+                          encoding="utf-8")
+        target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        made["ssh"] = f"{real_ssh}, sharing an interactive login with the server tools"
+
     return made
+
+
+_SSH_SHIM = """#!/bin/sh
+# Written by ARES Terminal Console. Deleting this file only stops the server
+# tools from reusing a login typed into a local pane.
+#
+# An interactive `ssh host` becomes the master of a shared connection, so the
+# tools (◈ on the pane) run over it without a second login. Anything that is
+# not a terminal session, or that sets its own ControlMaster/ControlPath/-S,
+# runs the real ssh untouched.
+if [ -t 0 ] && [ -t 1 ]; then
+  for a in "$@"; do
+    case "$a" in
+      -S*|*[Cc]ontrol[Mm]aster*|*[Cc]ontrol[Pp]ath*) exec {ssh} "$@" ;;
+    esac
+  done
+  exec {ssh} -o ControlMaster=auto -o ControlPath={path} -o ControlPersist=60 "$@"
+fi
+exec {ssh} "$@"
+"""
 
 
 def shlex_quote(s: str) -> str:
@@ -200,7 +234,7 @@ def environment(bindir) -> dict:
     # BSD/macOS ls reads these instead of LS_COLORS.
     env.setdefault("CLICOLOR", "1")
 
-    bindir = str(Path(bindir))
+    bindir = str(Path(bindir).resolve())    # a shell may start anywhere: never relative
     path = os.environ.get("PATH", "")
     if bindir not in path.split(os.pathsep):
         env["PATH"] = bindir + os.pathsep + path
