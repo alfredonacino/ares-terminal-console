@@ -81,7 +81,10 @@ for p in $PLATFORMS; do
 done
 # Merge every SHA256SUMS that names this version into dist/SHA256SUMS.
 cat "$ROOT/dist/SHA256SUMS" "$LOGS"/*-dist/SHA256SUMS 2>/dev/null | tr -d '\r' | sed 's/ \*/  /' \
-  | awk 'NF==2 {sums[$2]=$0} END {for (f in sums) print sums[f]}' | sort -k2 > "$LOGS/SHA256SUMS.merged"
+  | awk 'NF==2 {sums[$2]=$0} END {for (f in sums) print sums[f]}' | sort -k2 \
+  | while read -r sum name; do [ -f "$ROOT/dist/$name" ] && printf '%s  %s\n' "$sum" "$name"; done \
+  > "$LOGS/SHA256SUMS.merged"   # only files still in dist/: an old version's entries go
 cp "$LOGS/SHA256SUMS.merged" "$ROOT/dist/SHA256SUMS"
-(cd "$ROOT/dist" && sha256sum -c --quiet SHA256SUMS) && echo "dist/ checksums verified"
+(cd "$ROOT/dist" && sha256sum -c --quiet SHA256SUMS) || { echo "dist/SHA256SUMS does not verify"; exit 1; }
+echo "dist/ checksums verified"
 ls -1 "$ROOT/dist" | grep "$VERSION"
