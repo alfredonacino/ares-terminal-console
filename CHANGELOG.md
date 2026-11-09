@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.2]
 - The server tools follow an `ssh` typed into a local pane: while the shell is logged in to a server, ◈ server and every tool work on that server over the pane's own login (a small `ssh` wrapper on local panes' PATH adds connection sharing for interactive logins); after `exit` they are back on this computer.
 - The wrapper directory is always put on PATH as an absolute path.
 
