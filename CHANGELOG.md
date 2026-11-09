@@ -1,5 +1,8 @@
 # Changelog
 
+## [2.2.1]
+- The server tools now work on local panes too (◈ system, Ctrl+Shift+X): health & processes, performance, logs, AI log analysis, packages, vulnerability scan and history for this computer. Its Stop refuses the app's own process.
+
 ## [2.2.0]
 - Server tools for SSH panes (◈ server, Ctrl+Shift+X): health & processes, performance analysis, log analysis, AI log analysis, packages & technologies, vulnerability scan and server history, from ARES Ultimate Console and TractorBeam.
 - The tools run read-only scripts over the pane's own SSH connection (OpenSSH multiplexing), so a password or one-time code is typed once, in the pane.

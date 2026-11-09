@@ -9,7 +9,7 @@
 [module]
 id       = "terminal"
 name     = "ARES Terminal Console"
-version  = "2.2.0"
+version  = "2.2.1"
 summary  = "Split-pane terminals with broadcast, keep-alive, a connection history and an AI command assistant."
 icon     = ">_"        # 1-3 characters for the sidebar tile
 accent   = "#b14cff"      # tile colour

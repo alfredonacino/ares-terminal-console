@@ -197,10 +197,11 @@ class Pane {
         this.tagEl,
         el("button", { class: "pane-cmds", title: "Commands sent to this pane",
                        onClick: (e) => { e.stopPropagation(); showCommandsFor(this); } }, "⌘"),
-        this.session.ssh
-          ? el("button", { class: "pane-tools", title: `Server tools for ${this.session.ssh} (Ctrl+Shift+X)`,
-                           onClick: (e) => { e.stopPropagation(); openInsight(this); } }, "◈ server")
-          : null,
+        el("button", { class: "pane-tools",
+                       title: (this.session.ssh ? `Server tools for ${this.session.ssh}`
+                                                : "System tools for this computer") + " (Ctrl+Shift+X)",
+                       onClick: (e) => { e.stopPropagation(); openInsight(this); } },
+           this.session.ssh ? "◈ server" : "◈ system"),
         el("button", { class: "icon-btn", title: "Split vertical",
                        onClick: (e) => { e.stopPropagation(); splitPane(this.id, "v"); } }, "⬒"),
         el("button", { class: "icon-btn", title: "Close pane",

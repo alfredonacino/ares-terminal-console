@@ -118,7 +118,9 @@ back a command that no longer connects.
 
 A pane running `ssh …` gets a **◈ server** button (or `Ctrl+Shift+X`). It opens
 seven tools for the machine on the other end, brought over from ARES Ultimate
-Console and TractorBeam:
+Console and TractorBeam. Any other pane gets **◈ system**, which opens the same
+seven tools for this computer, running the same read-only scripts in the local
+shell (the one exception: its Stop refuses the app's own process):
 
 | | |
 | --- | --- |

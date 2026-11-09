@@ -212,6 +212,28 @@ class Runner:
             time.sleep(0.3)
 
 
+class LocalRunner(Runner):
+    """The same probes on this computer, for a pane that is not `ssh ...`.
+
+    A probe is a command line plus a script on stdin, so the only difference
+    is who runs it: the local shell instead of the far side of an SSH
+    channel. On Windows that shell is cmd.exe, where `sh -s` fails and the
+    probes fall back to their PowerShell form exactly as on a Windows server.
+    """
+
+    def __init__(self):
+        super().__init__({"options": [], "destination": "localhost"})
+
+    def argv(self, remote_command: str):
+        return remote_command
+
+    def _popen(self, remote_command: str):
+        flags = 0x08000000 if os.name == "nt" else 0          # CREATE_NO_WINDOW
+        return subprocess.Popen(remote_command, shell=True, stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                creationflags=flags)
+
+
 HOST_KEY_SCRIPT = r"""
 for k in ed25519 ecdsa rsa; do
   f=/etc/ssh/ssh_host_${k}_key.pub

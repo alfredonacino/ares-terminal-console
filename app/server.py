@@ -93,7 +93,7 @@ LEDGER = None
 SSO_USER = {}
 
 REGISTRY = pty_session.Registry()
-INSIGHT = None          # set in start(): the server tools, one per SSH pane
+INSIGHT = None          # set in start(): the server tools, one per pane
 SERVERS = None          # set in start(): every server studied, by its identity
 HISTORY = None          # set in serve()
 SHIMS = {}              # set in serve(): which wrapper commands exist
@@ -533,7 +533,7 @@ class Handler(BaseHTTPRequestHandler):
         """/api/insight/<session>/<tool>[/<step>] -- see app/insight/service.py.
 
         Every tool works on the server the pane is connected to, over the
-        pane's own SSH login. A failure is a 400 with words, never a trace.
+        pane's own SSH login, or on this computer when the pane is local. A failure is a 400 with words, never a trace.
         """
         parts = path.strip("/").split("/")[2:]
         if len(parts) < 2:

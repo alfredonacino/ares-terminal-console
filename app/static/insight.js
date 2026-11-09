@@ -1,6 +1,7 @@
 /*
   Server tools — the seven analyses of ARES Ultimate Console and TractorBeam,
-  for the server an SSH pane is connected to.
+  for the server an SSH pane is connected to, or for this computer when the
+  pane is local.
 
   Everything here is a view of app/insight/service.py: the browser draws what
   the server measured and never talks to the far side itself. The two AI
@@ -61,11 +62,14 @@ function inline(s) {
 
 /* -------------------------------------------------------------- the sheet */
 
+/* "the server" or "this computer", for the words on screen. */
+function machine() { return ins.pane && !ins.pane.session.ssh ? "this computer" : "the server"; }
+
 function openInsight(pane, tool = "health") {
-  if (!pane || !pane.session || !pane.session.ssh) return;
+  if (!pane || !pane.session) return;
   if (ins.sid !== pane.session.id) { ins.cache = {}; ins.ident = null; }
   ins.pane = pane; ins.sid = pane.session.id;
-  $("#insightTitle").textContent = pane.session.ssh;
+  $("#insightTitle").textContent = pane.session.ssh || "This computer";
   $("#insightIdent").textContent = "identifying…";
   $("#insightWrap").hidden = false;
   buildNav();
@@ -119,7 +123,7 @@ function busy(host, text) {
   clear(host).append(el("div", { class: "ins-busy" }, el("span", { class: "ins-spin" }), text));
 }
 function failed(host, e, retry) {
-  clear(host).append(el("div", { class: "ins-card sev-crit" }, el("b", { text: "Could not read the server" }),
+  clear(host).append(el("div", { class: "ins-card sev-crit" }, el("b", { text: `Could not read ${machine()}` }),
     el("p", { text: e.message || String(e) }),
     retry ? el("button", { class: "btn sm", onClick: retry }, "Try again") : null));
 }
@@ -194,7 +198,7 @@ function chart(title, unit, series, labels) {
 
 async function showHealth(host) {
   const sid = ins.sid;
-  if (!ins.cache.health) busy(host, "Reading /proc on the server…");
+  if (!ins.cache.health) busy(host, `Reading /proc on ${machine()}…`);
   const tick = async () => {
     try {
       const d = ins.cache.health = await iapi("health");
@@ -396,7 +400,7 @@ async function showAI(host) {
         el("p", { text: "There is nothing to send for analysis." })));
       return;
     }
-    consent(host, p.payload, "These error lines go to Claude through your Claude Code subscription. Secrets were replaced with *** before you see them; nothing else — not the address, not the server's identity — is sent.",
+    consent(host, p.payload, "These error lines go to Claude through your Claude Code subscription. Secrets were replaced with *** before you see them; nothing else — not the address, not the machine's identity — is sent.",
       async (out) => {
         const r = await ipost("logs/ai", { payload: p.payload });
         return r;
@@ -427,7 +431,7 @@ function consent(host, payload, note, send) {
       const u = r.usage || {};
       if (u.cost != null) answer.append(el("p", { class: "ins-dim",
         text: u.subscription ? `Included in your subscription (~$${u.cost.toFixed(3)} at API rates)` : `$${u.cost.toFixed(4)}` }));
-      go.textContent = "Answered — saved to the server's history";
+      go.textContent = `Answered — saved to ${machine()}'s history`;
       pre.hidden = true;
     } catch (e) { answer.textContent = e.message; go.disabled = false; go.textContent = "Send to Claude"; }
   };
@@ -493,7 +497,7 @@ async function showVulns(host, force = false) {
 function drawVulns(host, d) {
   clear(host);
   host.append(el("div", { class: "ins-status " + sevClass(d.severity) }, el("b", { text: d.headline })));
-  host.append(el("h4", { text: "On the server" }), findingsList(d.findings));
+  host.append(el("h4", { text: machine() === "the server" ? "On the server" : "On this computer" }), findingsList(d.findings));
   if (d.looked_up) {
     const c = d.counts || {};
     host.append(el("h4", { text: `Known vulnerabilities (OSV, ${d.packages_checked} packages, ${d.ecosystem})` }),
@@ -532,7 +536,7 @@ function drawVulns(host, d) {
 
 async function showHistory(host) {
   const sid = ins.sid;
-  busy(host, "Reading what is known about this server…");
+  busy(host, `Reading what is known about ${machine() === "the server" ? "this server" : "this computer"}…`);
   try {
     const d = await iapi("history");
     if (!stillOn("hist", sid)) return;
@@ -544,7 +548,7 @@ async function showHistory(host) {
       tile("First seen", s ? new Date(s.first_seen * 1000).toLocaleDateString() : "—", s ? `last ${when(s.last_seen)}` : ""),
       tile("Reached as", String((s && s.connections || []).length), (s && s.connections || []).slice(0, 3).join(", "))));
     if (!s || !s.events.length) {
-      host.append(el("p", { class: "ins-dim", text: "Nothing studied here yet. Every analysis you run is kept here, against the server's own identity — not its address." }));
+      host.append(el("p", { class: "ins-dim", text: "Nothing studied here yet. Every analysis you run is kept here, against the machine's own identity — not its address." }));
       return;
     }
     host.append(el("div", { class: "ins-timeline" }, s.events.map((e) => {
@@ -574,7 +578,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Ctrl+Shift+X: browsers keep Ctrl+Shift+T and Ctrl+Shift+I for themselves.
     if (e.ctrlKey && e.shiftKey && (e.key === "X" || e.key === "x")) {
       const pane = state.focus ? state.panes.get(state.focus) : null;
-      if (pane && pane.session.ssh) { e.preventDefault(); openInsight(pane); }
+      if (pane && pane.session) { e.preventDefault(); openInsight(pane); }
     }
   }, true);
 });

@@ -190,14 +190,30 @@ class ServerHistory:
 
 # ------------------------------------------------------------------ one pane
 
+def _own_pids() -> set:
+    """This app and its parents, which the local Stop must never reach."""
+    import os
+    pids = {os.getpid()}
+    try:
+        pids.add(os.getppid())
+    except (AttributeError, OSError):
+        pass
+    return pids
+
+
 class Insight:
     def __init__(self, sid: str, command: str, history: ServerHistory):
         self.sid = sid
         self.target = remote.parse(command)
-        if not self.target:
-            raise InsightError("This pane is not an SSH connection.")
-        self.connection = remote.label(self.target)
-        self.runner = remote.Runner(self.target)
+        # A pane that is not `ssh ...` gets the same tools for this computer.
+        self.local = not self.target
+        if self.local:
+            import socket
+            self.connection = f"this computer ({socket.gethostname() or 'localhost'})"
+            self.runner = remote.LocalRunner()
+        else:
+            self.connection = remote.label(self.target)
+            self.runner = remote.Runner(self.target)
         self.history = history
         self.lock = threading.Lock()
         self.identity = None
@@ -235,10 +251,16 @@ class Insight:
             except OSError:
                 pass
 
+    def _explain(self, error: str) -> str:
+        """remote.explain, except that a local probe has no login to blame."""
+        if self.local:
+            return (error or "").strip()[:300] or "The command gave no answer."
+        return remote.explain(error)
+
     def _fail(self, exc: Exception) -> InsightError:
         if isinstance(exc, InsightError):
             return exc
-        return InsightError(remote.explain(str(exc)))
+        return InsightError(self._explain(str(exc)))
 
     # ---------------------------------------------------------- identity
     def identify(self, refresh: bool = False) -> dict:
@@ -255,7 +277,7 @@ class Insight:
             except Exception as exc:
                 raise self._fail(exc)
             if ident.error and not ident.uid:
-                raise InsightError(remote.explain(ident.error))
+                raise InsightError(self._explain(ident.error))
             self.identity = ident
             if ident.uid:
                 try:
@@ -285,7 +307,7 @@ class Insight:
             found["host"] = getattr(self.identity, "hostname", "") or ""
         found["connection"] = self.connection
         if code != 0 and not found["host"]:
-            found["error"] = remote.explain(err)
+            found["error"] = self._explain(err)
         self._where, self._where_at = found, now
         return found
 
@@ -310,6 +332,9 @@ class Insight:
             command = health.stop_command(pid, force)
         except health.HealthError as exc:
             raise InsightError(str(exc))
+        if self.local and pid in _own_pids():
+            raise InsightError("That process is ARES Terminal Console itself; stopping it "
+                               "would close every pane.")
         code, out, err = self.run_input(command, "")
         ok = code == 0
         msg = (f"Sent {'KILL' if force else 'TERM'} to {pid}." if ok else
@@ -344,9 +369,9 @@ class Insight:
                     "sh -s", script, lambda t: (chunks.append(t), run.update(text="".join(chunks))),
                     cancel, samples * every + 90)
                 if not chunks and code not in (0, -1):
-                    run["error"] = remote.explain(err or f"exit status {code}")
+                    run["error"] = self._explain(err or f"exit status {code}")
             except Exception as exc:
-                run["error"] = remote.explain(str(exc))
+                run["error"] = self._explain(str(exc))
             text = "".join(chunks)
             run["text"] = text
             system = perfcheck.no_proc(text)
@@ -361,7 +386,7 @@ class Insight:
                     run["state"] = "finished"
                     self._record("performance", rep.headline(), rep.severity, rep.to_text())
                 except Exception as exc:
-                    run.update(state="failed", error=remote.explain(str(exc)))
+                    run.update(state="failed", error=self._explain(str(exc)))
                 return
             try:
                 report = perfcheck.report(text, status="finished", mode=mode)
@@ -537,7 +562,8 @@ class Insight:
 
 
 class Registry:
-    """One Insight per SSH pane, made on first use."""
+    """One Insight per pane, made on first use: the server an SSH pane is
+    connected to, or this computer for any other pane."""
 
     def __init__(self, history: ServerHistory):
         self.history = history
