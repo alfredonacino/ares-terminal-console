@@ -367,7 +367,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/agent/state":
             # Asked on every page load, so it must be cheap and must never
             # raise: the answer "no" is what draws the bar as unavailable.
-            return self._json({"ok": True, **agent.state()})
+            return self._json({"ok": True, **agent.state(refresh=self._q1("refresh") == "1")})
         if path == "/api/agent/costs":
             return self._json({"ok": True, **LEDGER.analysis()})
         return self._static(path)

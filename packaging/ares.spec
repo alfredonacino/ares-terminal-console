@@ -14,7 +14,9 @@ APP_ID = "ares-terminal-console"
 ICON = str(ROOT / "packaging" / "icons" / ("ares.ico" if sys.platform == "win32" else "ares.icns"))
 VERSION = re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "apexmodule.toml").read_text(), re.M).group(1)
 
-hidden = collect_submodules("app")
+hidden = collect_submodules("app") + collect_submodules("claude_agent_sdk")
+# Not collect_data_files("claude_agent_sdk"): that would carry its _bundled CLI, 200+ MB per platform.
+# The assistant drives the Claude Code the user installed and signed in to.
 datas = [(str(ROOT / "app" / "static"), "app/static"), (str(ROOT / "apexmodule.toml"), "."),
          (str(ROOT / "packaging" / "icons" / "ares.png"), "icons"),
          (str(ROOT / "LICENSE"), ".")]
@@ -24,7 +26,7 @@ if sys.platform in ("win32", "darwin"):
 if sys.platform == "win32":
     hidden += collect_submodules("winpty")
     datas += collect_data_files("winpty")
-excludes = ["tkinter", "test", "unittest", "pytest", "IPython", "matplotlib", "numpy", "claude_agent_sdk"]
+excludes = ["tkinter", "test", "unittest", "pytest", "IPython", "matplotlib", "numpy"]
 if sys.platform.startswith("linux"):
     excludes += ["webview", "gi", "PyQt5", "PyQt6", "PySide6"]
 

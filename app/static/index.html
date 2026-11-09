@@ -94,7 +94,8 @@
      the pane unsent so it can be read and edited before Enter. -->
 <section class="askbar" id="askBar" hidden>
   <div class="ask-row">
-    <span class="ask-label" title="Claude Agent SDK">ask</span>
+    <span class="ask-label" title="Claude, through your Claude Code sign-in">ask</span>
+    <span class="ask-account" id="askAccount" hidden></span>
     <input id="askInput" type="text" autocomplete="off" spellcheck="false"
            placeholder="how do I find what is listening on port 8443?">
     <button class="btn sm primary" id="btnAsk">Ask</button>
@@ -110,7 +111,13 @@
     <div class="ask-meta" id="askMeta"></div>
   </div>
 
-  <p class="ask-unavailable" id="askUnavailable" hidden></p>
+  <div class="ask-unavailable" id="askUnavailable" hidden>
+    <span id="askUnavailableText"></span>
+    <span class="ask-fix">
+      <button class="btn sm primary" id="btnAskLogin" type="button" hidden>Sign in with Claude</button>
+      <button class="btn sm" id="btnAskRecheck" type="button">Check again</button>
+    </span>
+  </div>
 </section>
 
 <!-- History drawer -->

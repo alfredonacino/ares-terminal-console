@@ -1,5 +1,7 @@
-# Desktop app build: the native window, the Windows terminal backend and the freezer.
+# Desktop app build: the native window, the Windows terminal backend, the assistant SDK
+# (its bundled 200 MB CLI is left out: the app uses your own signed-in Claude Code) and the freezer.
 # The app itself still runs on the standard library alone (see requirements.txt).
 pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
 pywinpty>=2.0.14; sys_platform == "win32"
+claude-agent-sdk>=0.2.152
 pyinstaller==6.22.3

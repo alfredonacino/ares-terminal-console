@@ -157,34 +157,150 @@ def commands_in(text: str) -> list:
 
 
 # --------------------------------------------------------------- availability
+#
+# THE SUBSCRIPTION
+#
+# The SDK does not call the API itself: it drives the Claude Code CLI, and the
+# CLI signs in the way it always does -- with a Claude subscription (Pro, Max,
+# Team, Enterprise) through `claude auth login`. So the assistant uses whatever
+# account the operator's own Claude Code is signed in to, and there is no key
+# to paste into this app at all.
+#
+# Two things would quietly undo that, and both are handled here:
+#
+#   * an ANTHROPIC_API_KEY in the environment takes precedence over the
+#     subscription in the CLI, and bills per token to whoever owns the key. In
+#     the default mode it is masked from the CLI (not from the panes).
+#   * a desktop app launched from a menu gets a minimal PATH, so `claude` in
+#     ~/.local/bin is not found. The usual install locations are searched too.
+#
+# ARES_ASK_AUTH=api-key switches back to using the key, for people who want it.
 
-def state() -> dict:
+AUTH_MODE = (os.environ.get("ARES_ASK_AUTH") or "subscription").strip().lower()
+_MASKED = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+STATUS_TTL = 60            # seconds a sign-in check is trusted for
+_status_cache = {"at": 0.0, "cli": "", "value": None}
+_status_lock = threading.Lock()
+
+
+def subscription_mode() -> bool:
+    return AUTH_MODE != "api-key"
+
+
+def cli_env() -> dict:
+    """What the CLI's environment is overlaid with: the API key masked, so the
+    subscription is what signs the request."""
+    return {k: "" for k in _MASKED} if subscription_mode() else {}
+
+
+def find_cli() -> str:
+    """The operator's own Claude Code, wherever it was installed."""
+    import shutil
+    explicit = os.environ.get("CLAUDE_CODE_PATH", "").strip()
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    found = shutil.which("claude")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    exe = "claude.exe" if os.name == "nt" else "claude"
+    candidates = [
+        os.path.join(home, ".local", "bin", exe),           # the native installer
+        os.path.join(home, ".claude", "local", exe),         # `claude migrate-installer`
+        "/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude",
+        os.path.join(home, ".npm-global", "bin", "claude"),
+        os.path.join(home, ".bun", "bin", "claude"),
+    ]
+    if os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA", "")
+        candidates += [os.path.join(local, "Programs", "claude", exe),
+                       os.path.join(local, "AnthropicClaude", exe)]
+    for path in candidates:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return ""
+
+
+def account(cli: str, refresh: bool = False) -> dict:
+    """`claude auth status`, cached: who the CLI is signed in as, and how.
+
+    Run with the same environment an ask gets, so the answer describes the
+    credential an ask would actually use.
+    """
+    import subprocess
+    with _status_lock:
+        cached = _status_cache["value"]
+        if (not refresh and cached is not None and _status_cache["cli"] == cli
+                and time.time() - _status_cache["at"] < STATUS_TTL):
+            return cached
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    env.update(cli_env())
+    try:
+        out = subprocess.run([cli, "auth", "status", "--json"], capture_output=True,
+                             text=True, timeout=20, env=env, stdin=subprocess.DEVNULL,
+                             creationflags=0x08000000 if os.name == "nt" else 0)
+        data = json.loads(out.stdout or "{}")
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        data = {"loggedIn": False, "error": f"{e.__class__.__name__}: {e}"}
+    value = {
+        "signed_in": bool(data.get("loggedIn")),
+        "method": data.get("authMethod") or "",
+        "subscription": data.get("subscriptionType") or "",
+        "email": data.get("email") or "",
+        "org": data.get("orgName") or "",
+        "error": data.get("error") or "",
+    }
+    with _status_lock:
+        _status_cache.update(at=time.time(), cli=cli, value=value)
+    return value
+
+
+def login_command(cli: str) -> str:
+    """The command a pane runs to sign in."""
+    if os.name == "nt":
+        return f'"{cli}" auth login'
+    import shlex
+    return f"{shlex.quote(cli)} auth login"
+
+
+def state(refresh: bool = False) -> dict:
     """Whether an ask can succeed, and if not, what is missing.
 
     Every branch returns rather than raises. The question box is one feature of
     a terminal, and a terminal that refuses to start because an optional SDK is
     absent has its priorities backwards.
     """
+    base = {"mode": "subscription" if subscription_mode() else "api-key"}
     try:
         import claude_agent_sdk                                   # noqa: F401
     except Exception as e:
-        return {"available": False, "reason": "sdk",
+        return {**base, "available": False, "reason": "sdk",
                 "detail": f"claude-agent-sdk is not installed ({e.__class__.__name__}). "
-                          f"Run `apex setup terminal`, or "
-                          f"`pip install claude-agent-sdk` in this module's .venv."}
+                          "Install it with `pip install claude-agent-sdk` in the "
+                          "environment this runs from; the desktop app includes it."}
 
-    import shutil
-    if not (shutil.which("claude") or os.environ.get("CLAUDE_CODE_PATH")):
-        return {"available": False, "reason": "cli",
-                "detail": "The `claude` CLI was not found on PATH. The Agent SDK "
-                          "drives it, so install Claude Code or set CLAUDE_CODE_PATH."}
+    cli = find_cli()
+    if not cli:
+        return {**base, "available": False, "reason": "cli",
+                "detail": "Claude Code was not found. The assistant uses your Claude "
+                          "subscription through it: install it from "
+                          "https://claude.com/claude-code, then sign in. If it is "
+                          "installed somewhere unusual, set CLAUDE_CODE_PATH."}
 
-    # Credentials are deliberately not probed here: the SDK accepts an API key
-    # or the CLI's own signed-in session, and asking which one is in play costs
-    # a round trip on every page load. A missing credential surfaces as a
-    # failed ask, with the SDK's own message, which is more useful anyway.
-    return {"available": True, "reason": "", "detail": "",
-            "has_api_key": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+    if not subscription_mode():
+        return {**base, "available": True, "reason": "", "detail": "", "cli": cli,
+                "has_api_key": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+
+    who = account(cli, refresh=refresh)
+    if not who["signed_in"]:
+        return {**base, "available": False, "reason": "login", "cli": cli,
+                "login_command": login_command(cli),
+                "detail": "Claude Code is not signed in. Sign in with your Claude "
+                          "subscription to use the assistant."
+                          + (f" ({who['error']})" if who["error"] else "")}
+    return {**base, "available": True, "reason": "", "detail": "", "cli": cli,
+            "account": who, "login_command": login_command(cli),
+            "masked_api_key": bool(os.environ.get("ANTHROPIC_API_KEY"))}
 
 
 # ---------------------------------------------------------------- asking
@@ -210,7 +326,7 @@ def ask(prompt: str, cwd: str = "", model: str = "") -> dict:
         return {"ok": False, "error": ready["detail"], "reason": ready["reason"]}
 
     try:
-        return asyncio.run(_ask(prompt, cwd, model))
+        return asyncio.run(_ask(prompt, cwd, model, ready.get("cli", "")))
     except Exception as e:
         # Includes the SDK's own CLINotFoundError, ProcessError and the
         # authentication failures, all of which are things to show the user
@@ -218,7 +334,7 @@ def ask(prompt: str, cwd: str = "", model: str = "") -> dict:
         return {"ok": False, "error": f"{e.__class__.__name__}: {e}"}
 
 
-async def _ask(prompt: str, cwd: str, model: str) -> dict:
+async def _ask(prompt: str, cwd: str, model: str, cli: str = "") -> dict:
     from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions,
                                   ResultMessage, TextBlock, query)
     import asyncio
@@ -238,6 +354,10 @@ async def _ask(prompt: str, cwd: str, model: str) -> dict:
         setting_sources=None,
         cwd=cwd or None,
         model=model or None,
+        # The operator's own Claude Code and its sign-in, never a copy bundled
+        # into this app; and in subscription mode, no API key to outrank it.
+        cli_path=cli or None,
+        env=cli_env(),
     )
 
     chunks, result = [], None
@@ -257,8 +377,12 @@ async def _ask(prompt: str, cwd: str, model: str) -> dict:
     if not text:
         return {"ok": False, "error": "The agent returned nothing."}
 
-    return {"ok": True, "text": text, "commands": commands_in(text),
-            "usage": _usage_of(result)}
+    usage = _usage_of(result)
+    if usage and subscription_mode():
+        # The CLI still reports what the ask would have cost at API rates. On a
+        # subscription that is not a bill, and the panel must say so.
+        usage["subscription"] = True
+    return {"ok": True, "text": text, "commands": commands_in(text), "usage": usage}
 
 
 def _usage_of(result) -> dict:
@@ -373,6 +497,7 @@ class Ledger:
             "ok": bool(ok),
             "cost": usage.get("cost"),
             "estimated": bool(usage.get("estimated")),
+            "subscription": bool(usage.get("subscription")),
             "input": usage.get("input", 0),
             "output": usage.get("output", 0),
             "cache_read": usage.get("cache_read", 0),
@@ -422,6 +547,7 @@ class Ledger:
             # True when at least one row's cost came from the price table rather
             # than from the SDK, so the panel can mark the total as approximate.
             "estimated": any(a.get("estimated") for a in priced),
+            "subscription": any(a.get("subscription") for a in asks),
             "total": total,
             "average": (total / len(priced)) if priced else 0.0,
             "tokens": tokens,

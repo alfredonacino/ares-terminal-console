@@ -284,6 +284,22 @@ def self_test() -> int:
         checks.append(("a shell runs in a terminal and its output comes back",
                        b"ares-self-test-ok" in out))
 
+    # The assistant: the SDK must have arrived (it is imported lazily, which is
+    # exactly the shape a freezer misses), and looking for Claude Code must work
+    # whether or not this machine has it. Being signed in is the user's business.
+    from app import agent
+    try:
+        import claude_agent_sdk  # noqa: F401
+        sdk = True
+    except Exception:
+        sdk = False
+    checks.append(("the assistant SDK is bundled", sdk))
+    try:
+        cli = agent.find_cli()
+        checks.append((f"Claude Code lookup works ({cli or 'not installed here'})", True))
+    except Exception as e:
+        checks.append((f"Claude Code lookup works ({e!r})", False))
+
     if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
         bundle = os.path.dirname(sys.executable)
         checks.append(("shells started here use the system's libraries",

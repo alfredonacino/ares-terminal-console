@@ -769,18 +769,46 @@ function setAskOpen(open) {
   if (open) $("#askInput").focus();
 }
 
-async function loadAskState() {
+async function loadAskState(refresh = false) {
   try {
-    ask.ready = await api("/api/agent/state");
+    ask.ready = await api("/api/agent/state" + (refresh ? "?refresh=1" : ""));
   } catch (_) {
     ask.ready = { available: false, detail: "The backend did not answer." };
   }
-  const bad = $("#askUnavailable");
-  const usable = !!(ask.ready && ask.ready.available);
-  bad.hidden = usable;
-  bad.textContent = usable ? "" : (ask.ready.detail || "The assistant is unavailable.");
+  const r = ask.ready || {};
+  const usable = !!r.available;
+  $("#askUnavailable").hidden = usable;
+  $("#askUnavailableText").textContent = usable ? "" : (r.detail || "The assistant is unavailable.");
+  // Signing in is a terminal job: `claude auth login` opens the browser for
+  // the Claude account and finishes in the pane, where the operator can see it.
+  $("#btnAskLogin").hidden = !(r.reason === "login" && r.login_command);
   $("#askInput").disabled = !usable;
   $("#btnAsk").disabled = !usable;
+
+  const who = $("#askAccount");
+  const acct = r.account || null;
+  if (usable && acct) {
+    const sub = acct.subscription || "";
+    who.textContent = sub ? `Claude ${sub[0].toUpperCase()}${sub.slice(1)}`
+                          : (acct.method === "claude.ai" ? "Claude subscription" : (acct.method || "Claude"));
+    who.title = `Signed in to Claude Code${acct.email ? " as " + acct.email : ""}`
+      + (acct.org ? ` (${acct.org})` : "")
+      + (r.masked_api_key ? ". ANTHROPIC_API_KEY is set but not used: asks go through the subscription." : "");
+    who.hidden = false;
+  } else if (usable && r.mode === "api-key") {
+    who.textContent = "API key";
+    who.title = "ARES_ASK_AUTH=api-key: asks are billed to the API key";
+    who.hidden = false;
+  } else {
+    who.hidden = true;
+  }
+}
+
+async function askLogin() {
+  const r = ask.ready || {};
+  if (!r.login_command) return;
+  await openPane({ command: r.login_command, label: "Sign in to Claude" });
+  toast("Signing in", { body: "Finish in the new pane, then press Check again.", severity: "info" });
 }
 
 async function doAsk() {
@@ -846,7 +874,9 @@ function renderAnswer(data) {
   const u = data.usage || {};
   const bits = [];
   if (u.cost != null) {
-    bits.push(`<b>$${u.cost.toFixed(4)}</b>${u.estimated ? " (estimated)" : ""}`);
+    bits.push(u.subscription
+      ? `<span title="What this would have cost at API rates. Asks through a subscription are not billed per token.">included in subscription (~$${u.cost.toFixed(4)} at API rates)</span>`
+      : `<b>$${u.cost.toFixed(4)}</b>${u.estimated ? " (estimated)" : ""}`);
   }
   if (u.input != null) bits.push(`${u.input.toLocaleString()} in / ${(u.output || 0).toLocaleString()} out`);
   if (u.duration_ms != null) bits.push(`${(u.duration_ms / 1000).toFixed(1)}s`);
@@ -921,6 +951,9 @@ async function openCosts() {
       ${tile("Tokens out", (t.output || 0).toLocaleString())}
     </div>
 
+    ${d.subscription ? `<p class="cost-note">Asks made through your Claude subscription
+      are not billed per token; their amounts are what they would cost at API rates,
+      shown so you can see the usage.</p>` : ""}
     ${d.estimated ? `<p class="cost-note cost-est">Some rows have no cost from
       the SDK — a Claude subscription session bills nothing per request — so
       those are priced from the published rate card and marked estimated.</p>` : ""}
@@ -993,6 +1026,8 @@ function wire() {
   $("#btnAskBar").onclick = () => setAskOpen(!ask.open);
   $("#btnAsk").onclick = doAsk;
   $("#askInput").onkeydown = (e) => { if (e.key === "Enter") doAsk(); };
+  $("#btnAskLogin").onclick = () => askLogin();
+  $("#btnAskRecheck").onclick = () => loadAskState(true);
   $("#btnAskClose").onclick = () => setAskOpen(false);
   $("#btnAskCost").onclick = openCosts;
   $("#btnCostClose").onclick = closeCosts;

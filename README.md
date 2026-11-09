@@ -129,14 +129,35 @@ That is the whole design argument. A terminal is the one application where
 precisely to see the command before it runs, often on a machine that is already
 in a bad way.
 
+### Your Claude subscription
+
+The assistant runs on the **Claude Code you already use, signed in with your
+Claude subscription** (Pro, Max, Team or Enterprise). There is no key to paste
+into this app: the SDK drives your `claude` CLI, and the CLI signs the request
+with its own login. The ask bar shows the plan it is using (say, *Claude Max*);
+hover it to see the account.
+
+- **Not signed in?** The bar says so and offers **Sign in with Claude**, which
+  opens a pane running `claude auth login`. Finish there, press **Check
+  again**.
+- **Claude Code not installed?** Install it from
+  <https://claude.com/claude-code>. It is found on `PATH` and in its usual
+  install folders, which matters for a desktop app started from a menu with a
+  short `PATH`; `CLAUDE_CODE_PATH` points at it anywhere else.
+- **An `ANTHROPIC_API_KEY` in your environment** would normally outrank the
+  subscription and bill per token. Here it is masked from the assistant (not
+  from your panes), so asks go through the subscription. To use the key
+  instead, start the app with `ARES_ASK_AUTH=api-key`.
+
 ### What it costs
 
-The `$` button opens a cost panel: total spend, per day, per model, and the
-recent asks with their tokens. The numbers come from the SDK's own accounting
-(`ResultMessage.total_cost_usd` and its per-model breakdown), so they are what
-was billed rather than a guess from a rate card. A row is marked *estimated*
-only when the SDK reported no cost at all, which is what a Claude subscription
-session does rather than an API key.
+The `$` button opens a cost panel: total, per day, per model, and the recent
+asks with their tokens, from the SDK's own accounting
+(`ResultMessage.total_cost_usd` and its per-model breakdown). Through a
+subscription nothing is billed per token, so those amounts are labelled
+*included in subscription* and shown as what the ask would cost at API rates:
+a measure of usage, not a bill. With `ARES_ASK_AUTH=api-key` they are what was
+billed. A row is marked *estimated* only when the SDK reported no cost at all.
 
 Questions are stored so a cost can be attributed to one; answers are not. The
 ledger lives beside the history, in the data directory, and `Clear the ledger`
@@ -145,8 +166,9 @@ empties it.
 ### The one dependency
 
 `claude-agent-sdk` is the only thing in `requirements.txt`, it is optional, and
-it is imported lazily. `apex setup terminal` installs it into the module's own
-`.venv`. Without it the bar says so and everything else works unchanged —
+it is imported lazily. The desktop app includes it; from source,
+`pip install claude-agent-sdk` (under ApexBuild, `apex setup terminal` does
+that in the module's own `.venv`). Without it the bar says so and everything else works unchanged —
 a terminal has to open on a machine with no SDK, no Node and no network, which
 is generally why you reach for one.
 
@@ -176,9 +198,10 @@ Its data lives in `~/.local/share/ares-terminal-console` (Linux),
 temporary folder, proves a shell runs, and exits; every release build must pass
 it. Building: see [`packaging/`](packaging) and *Releasing* below.
 
-The command assistant needs `claude-agent-sdk`, which the desktop build does not
-bundle (it carries a platform-specific CLI of its own); there the ask bar says
-it is unavailable and everything else works.
+The desktop app includes the assistant's SDK but not the 200 MB copy of the
+Claude Code CLI that ships inside it: it uses the Claude Code you installed and
+signed in to, so there is one login and one thing to keep up to date. See
+[Your Claude subscription](#your-claude-subscription).
 
 ## Docker
 

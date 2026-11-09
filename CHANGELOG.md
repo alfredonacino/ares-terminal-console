@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0]
+- The assistant ("ask") works in the desktop app and uses your Claude subscription: it runs on the Claude Code you installed and signed in to, with no API key to paste.
+- The ask bar shows the plan it is using (for example Claude Max). When Claude Code is not signed in it offers "Sign in with Claude", which opens a pane running `claude auth login`, and "Check again".
+- An ANTHROPIC_API_KEY in the environment no longer outranks the subscription for asks (set ARES_ASK_AUTH=api-key to use the key).
+- Claude Code is found in its usual install folders too, for an app started from a menu with a short PATH.
+- Costs of subscription asks are labelled "included in subscription" and shown at API rates as a measure of usage.
+- MIT licensed.
+
 ## [2.0.0]
 - Renamed: Apex Terminal is now ARES Terminal Console. Your 1.x history and saved connections are carried across on first start.
 - Desktop application for Linux (.deb, Arch package, tarball), macOS (Apple silicon .dmg) and Windows (installer and portable zip), in a window of its own.
