@@ -14,10 +14,10 @@ command -v makepkg >/dev/null || { echo "makepkg not found: run this on Arch Lin
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 SUM=$(sha256sum "$TARBALL" | cut -d' ' -f1)
-LSUM=$(sha256sum "$ROOT/packaging/arch/LICENSE" | cut -d' ' -f1)
+LSUM=$(sha256sum "$ROOT/LICENSE" | cut -d' ' -f1)
 sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$SUM/" -e "s/@LICENSE_SHA256@/$LSUM/" \
   "$ROOT/packaging/arch/PKGBUILD" > "$WORK/PKGBUILD"
-cp "$ROOT/packaging/arch/LICENSE" "$WORK/"
+cp "$ROOT/LICENSE" "$WORK/"
 ln -s "$TARBALL" "$WORK/"
 (cd "$WORK" && PKGDEST="$WORK/out" PKGEXT=.pkg.tar.zst makepkg --force --cleanbuild --nodeps --noconfirm >&2 \
    && makepkg --printsrcinfo > .SRCINFO)

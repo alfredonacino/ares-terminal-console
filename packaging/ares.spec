@@ -16,7 +16,8 @@ VERSION = re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "apexmodule.toml").read
 
 hidden = collect_submodules("app")
 datas = [(str(ROOT / "app" / "static"), "app/static"), (str(ROOT / "apexmodule.toml"), "."),
-         (str(ROOT / "packaging" / "icons" / "ares.png"), "icons")]
+         (str(ROOT / "packaging" / "icons" / "ares.png"), "icons"),
+         (str(ROOT / "LICENSE"), ".")]
 if sys.platform in ("win32", "darwin"):
     hidden += collect_submodules("webview")
     datas += collect_data_files("webview")

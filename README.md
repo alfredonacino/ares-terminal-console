@@ -270,3 +270,8 @@ packaging/docker/docker-push.sh    # build, check and push the Docker image
 `release.sh` reads its token and signing key from
 `~/.config/ares-repository/ares-terminal-console.env`; neither is ever in this
 repository.
+
+## License
+
+[MIT](LICENSE). The vendored xterm.js under `app/static/vendor/` is MIT as well,
+under its own copyright.

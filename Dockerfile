@@ -14,6 +14,7 @@ ARG VERSION=dev
 LABEL org.opencontainers.image.title="ARES Terminal Console" \
       org.opencontainers.image.description="Split-pane terminals in a browser, with broadcast, keep-alive and a connection history" \
       org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.source="https://github.com/alfredonacino/ares-terminal-console"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SHELL=/bin/bash LANG=C.UTF-8
 RUN apt-get update -qq \
@@ -24,7 +25,7 @@ RUN apt-get update -qq \
  && useradd --uid 10001 --create-home --shell /bin/bash ares \
  && mkdir -p /data && chown ares:ares /data
 WORKDIR /opt/ares-terminal-console
-COPY --chown=root:root apexmod apexmodule.toml ./
+COPY --chown=root:root apexmod apexmodule.toml LICENSE ./
 COPY --chown=root:root app ./app
 USER 10001
 WORKDIR /home/ares

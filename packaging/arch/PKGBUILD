@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc="Split-pane terminals with broadcast, keep-alive, a connection history and a command assistant"
 arch=('x86_64')
 url="https://github.com/alfredonacino/ares-terminal-console"
-license=('LicenseRef-proprietary')
+license=('MIT')
 depends=('glibc' 'zlib' 'hicolor-icon-theme')
 optdepends=('chromium: open the console in its own app window'
             'google-chrome: open the console in its own app window'

@@ -103,6 +103,7 @@ def build_tar(tree: Path) -> Path:
     for f in ("install.sh", f"{APP_ID}.desktop"):
         shutil.copy2(ROOT / "packaging" / "linux" / f, stage / f)
     shutil.copy2(ROOT / "packaging" / "icons" / "ares.png", stage / f"{APP_ID}.png")
+    shutil.copy2(ROOT / "LICENSE", stage / "LICENSE")
     (stage / "install.sh").chmod(0o755)
     out = OUT / f"{base_name()}.tar.gz"
     with tarfile.open(out, "w:gz") as tar:
@@ -126,6 +127,9 @@ def build_deb(tree: Path) -> Path:
         d = root / f"usr/share/icons/hicolor/{size}x{size}/apps"
         d.mkdir(parents=True)
         shutil.copy2(ROOT / "packaging/icons" / src, d / f"{APP_ID}.png")
+    doc = root / "usr/share/doc" / APP_ID
+    doc.mkdir(parents=True)
+    shutil.copy2(ROOT / "LICENSE", doc / "copyright")
     size_kb = sum(f.stat().st_size for f in root.rglob("*") if f.is_file() and not f.is_symlink()) // 1024
     control = (f"Package: {APP_ID}\nVersion: {VERSION}\nSection: utils\nPriority: optional\n"
                f"Architecture: {'amd64' if ARCH == 'x86_64' else ARCH}\nInstalled-Size: {size_kb}\n"
