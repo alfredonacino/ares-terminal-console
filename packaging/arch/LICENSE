@@ -1,0 +1,8 @@
+ARES Terminal Console
+Copyright (c) 2026 Alfredo Nacino. All rights reserved.
+
+The source code is published for reading and review. Use, redistribution or
+modification without permission is not granted by its publication.
+
+The bundled third-party components (Python, xterm.js and others under
+/usr/lib/ares-terminal-console/_internal) remain under their own licenses.

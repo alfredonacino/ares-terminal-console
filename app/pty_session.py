@@ -9,9 +9,10 @@ connection to the same id gets the buffer replayed and carries on. That is the
 tmux property people actually want from tmux, and it is why this file has a
 registry rather than a function.
 
-Everything here is standard library. On POSIX that is `pty` and `termios`; on
-Windows there is no equivalent in the standard library, so the module reports
-itself unsupported rather than pretending (see `unsupported_reason`).
+Everything here is standard library on POSIX: `pty` and `termios`. Windows has
+no equivalent in the standard library, so there the module uses ConPTY through
+`pywinpty`, which the Windows desktop build carries. Without it the module
+reports itself unsupported rather than pretending (see `unsupported_reason`).
 """
 
 import errno
@@ -33,6 +34,13 @@ try:
 except ImportError:  # pragma: no cover - Windows
     POSIX_PTY = False
 
+WINPTY = None
+if not POSIX_PTY:  # pragma: no cover - Windows
+    try:
+        from winpty import PtyProcess as WINPTY
+    except ImportError:
+        WINPTY = None
+
 # How much output to keep per session for replay on reattach. 256 KB is a few
 # thousand lines of ordinary terminal traffic -- enough to see what happened
 # while you were away, small enough that twenty idle sessions cost nothing.
@@ -47,7 +55,15 @@ READ_CHUNK = 65536
 # spends all its time in frame handling instead of drawing.
 COALESCE_S = 0.012
 
-DEFAULT_SHELL = os.environ.get("SHELL") or "/bin/bash"
+def _default_shell() -> str:
+    if sys.platform == "win32":
+        import shutil
+        return (shutil.which("pwsh.exe") or shutil.which("powershell.exe")
+                or os.environ.get("COMSPEC") or "cmd.exe")
+    return os.environ.get("SHELL") or "/bin/bash"
+
+
+DEFAULT_SHELL = _default_shell()
 
 # Filled in by set_shell_extras() at startup: the colour scheme and the wrapper
 # commands that make a listing readable. Empty until then, so a Session created
@@ -62,15 +78,15 @@ def set_shell_extras(env: dict) -> None:
 
 
 def supported() -> bool:
-    return POSIX_PTY
+    return POSIX_PTY or WINPTY is not None
 
 
 def unsupported_reason() -> str:
-    if POSIX_PTY:
+    if supported():
         return ""
-    return ("this platform has no pty module. Terminals need a POSIX pty; "
-            "Windows needs a ConPTY binding (pywinpty), which this app does "
-            "not carry because it would be its only dependency.")
+    return ("this platform has no pty module. Terminals need a POSIX pty, or "
+            "on Windows the ConPTY binding pywinpty (pip install pywinpty); "
+            "the Windows desktop build of ARES Terminal Console includes it.")
 
 
 class Session:
@@ -89,6 +105,7 @@ class Session:
 
         self.pid = None
         self.fd = None
+        self.proc = None              # Windows: the winpty PtyProcess
         self._scrollback = bytearray()
         self._lock = threading.RLock()
         self._listeners = []          # queue.Queue per attached socket
@@ -106,10 +123,9 @@ class Session:
     # ------------------------------------------------------------------ spawn
 
     def _spawn(self, extra_env: dict) -> None:
-        if not POSIX_PTY:
+        if not supported():
             raise RuntimeError(unsupported_reason())
 
-        argv = shlex.split(self.command) if self.command.strip() else [DEFAULT_SHELL]
         env = dict(os.environ)
         # Colour scheme and the ls/ll/la wrappers first, so a caller's own
         # env still overrides them.
@@ -125,6 +141,10 @@ class Session:
         env.pop("TMUX", None)
         env.pop("STY", None)
 
+        if not POSIX_PTY:
+            return self._spawn_windows(env)
+
+        argv = shlex.split(self.command) if self.command.strip() else [DEFAULT_SHELL]
         pid, fd = pty.fork()
         if pid == 0:  # child
             try:
@@ -137,7 +157,7 @@ class Session:
                 # Still the child: write the reason onto the PTY so the user
                 # sees it in the pane, then leave without running atexit
                 # handlers the parent would also run.
-                os.write(2, f"apex-terminal: cannot run {argv[0]!r}: {e}\r\n".encode())
+                os.write(2, f"ares-terminal-console: cannot run {argv[0]!r}: {e}\r\n".encode())
                 os._exit(127)
 
         self.pid = pid
@@ -147,6 +167,42 @@ class Session:
         self._reader = threading.Thread(target=self._pump, name=f"pty-{self.id}",
                                         daemon=True)
         self._reader.start()
+
+    def _spawn_windows(self, env: dict) -> None:  # pragma: no cover - Windows
+        """ConPTY. The command line goes through as one string: Windows has no
+        argv, and splitting it POSIX-style would mangle every backslash."""
+        try:
+            self.proc = WINPTY.spawn(self.command.strip() or DEFAULT_SHELL,
+                                     cwd=self.cwd if os.path.isdir(self.cwd) else None,
+                                     env=env, dimensions=(self.rows, self.cols))
+        except Exception as e:
+            raise RuntimeError(f"cannot start {self.command!r}: {e}") from e
+        self.pid = self.proc.pid
+        self._reader = threading.Thread(target=self._pump_windows, name=f"conpty-{self.id}",
+                                        daemon=True)
+        self._reader.start()
+
+    def _pump_windows(self) -> None:  # pragma: no cover - Windows
+        """winpty's read blocks and returns text, so there is nothing to select
+        on: read, emit, repeat, until the far end closes."""
+        while True:
+            try:
+                chunk = self.proc.read(READ_CHUNK)
+            except EOFError:
+                break
+            except Exception:
+                break
+            if chunk:
+                self._emit(chunk.encode("utf-8", "replace") if isinstance(chunk, str) else chunk)
+            elif not self.proc.isalive():
+                break
+        code = None
+        for _ in range(50):
+            if not self.proc.isalive():
+                code = self.proc.exitstatus
+                break
+            time.sleep(0.1)
+        self._finish(code)
 
     # ------------------------------------------------------------------- pump
 
@@ -204,9 +260,8 @@ class Session:
                 # for every other viewer of the same session.
                 pass
 
-    def _finish(self) -> None:
-        code = None
-        if self.pid:
+    def _finish(self, code=None) -> None:
+        if self.pid and POSIX_PTY:
             try:
                 _, status = os.waitpid(self.pid, 0)
                 code = os.waitstatus_to_exitcode(status)
@@ -241,7 +296,18 @@ class Session:
             return bytes(self._scrollback)
 
     def write(self, data) -> None:
-        if self.fd is None or self.ended:
+        if self.ended:
+            return
+        if self.proc is not None:  # pragma: no cover - Windows
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", "replace")
+            self.last_activity = time.time()
+            try:
+                self.proc.write(data)
+            except Exception:
+                pass
+            return
+        if self.fd is None:
             return
         if isinstance(data, str):
             data = data.encode("utf-8", "replace")
@@ -257,6 +323,12 @@ class Session:
 
     def set_size(self, rows: int, cols: int) -> None:
         self.rows, self.cols = max(2, int(rows)), max(2, int(cols))
+        if self.proc is not None:  # pragma: no cover - Windows
+            try:
+                self.proc.setwinsize(self.rows, self.cols)
+            except Exception:
+                pass
+            return
         if self.fd is None:
             return
         try:
@@ -270,6 +342,20 @@ class Session:
 
     def send_signal(self, name: str) -> bool:
         """Signal the foreground process group, the way Ctrl-C does."""
+        if self.proc is not None:  # pragma: no cover - Windows
+            # ConPTY turns a typed ^C into CTRL_C_EVENT for the console's
+            # processes, which is the nearest Windows has to a process group.
+            name = name.upper()
+            try:
+                if name == "INT":
+                    self.proc.write("\x03")
+                elif name in ("TERM", "KILL", "HUP", "QUIT"):
+                    self.proc.terminate(force=True)
+                else:
+                    return False
+                return True
+            except Exception:
+                return False
         sig = {"INT": signal.SIGINT, "TERM": signal.SIGTERM, "QUIT": signal.SIGQUIT,
                "HUP": signal.SIGHUP, "KILL": signal.SIGKILL}.get(name.upper())
         if sig is None or self.pid is None:
@@ -327,6 +413,12 @@ class Session:
         if self._closing:
             return
         self._closing = True
+        if self.proc is not None:  # pragma: no cover - Windows
+            try:
+                self.proc.terminate(force=True)
+            except Exception:
+                pass
+            return
         if self.pid:
             try:
                 os.killpg(os.getpgid(self.pid), signal.SIGKILL if force else signal.SIGHUP)

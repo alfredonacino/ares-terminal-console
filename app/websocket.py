@@ -269,7 +269,7 @@ class WebSocket:
                         on_dead()
                     return
                 try:
-                    self.send_ping(b"apex")
+                    self.send_ping(b"ares")
                 except WebSocketClosed:
                     return
         self._pinger = threading.Thread(target=_run, name="ws-keepalive", daemon=True)

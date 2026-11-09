@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ARES Terminal Console
+GenericName=Terminal
+Comment=Split-pane terminals with broadcast, keep-alive and a connection history
+Exec=@EXEC@
+Icon=ares-terminal-console
+Terminal=false
+Categories=System;TerminalEmulator;Utility;
+Keywords=shell;prompt;command;commandline;ssh;tmux;
+StartupWMClass=ares-terminal-console

@@ -30,7 +30,7 @@ of it here, in a module whose selling point is that it has no dependencies.
 
 WHICH BRINGS US TO THE DEPENDENCY
 
-This is the only part of Apex Terminal that needs one, and it is optional on
+This is the only part of ARES Terminal Console that needs one, and it is optional on
 purpose. The import is lazy and every failure to find it is reported as
 "unavailable" rather than raised: a terminal must still open a PTY on a machine
 with no SDK, no Node, and no network. See `state()`.
@@ -80,7 +80,7 @@ ASK_TIMEOUT = 120
 MAX_PROMPT = 4000
 
 SYSTEM_PROMPT = """\
-You are a command-line assistant embedded in Apex Terminal, a split-pane \
+You are a command-line assistant embedded in ARES Terminal Console, a split-pane \
 terminal emulator. The person asking is a support engineer at a shell.
 
 Answer with the command they need. Put every command in its own fenced code \

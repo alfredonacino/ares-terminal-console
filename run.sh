@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run Apex Terminal on its own, outside ApexBuild.
+# Run ARES Terminal Console on its own, outside ApexBuild.
 #
 # Identical in shape across every app in the suite: this script starts the app
 # and opens a browser, and everything it can do is a flag it passes straight

@@ -1,8 +1,30 @@
-# Apex Terminal
+<img src="packaging/icons/ares-256.png" alt="" width="72">
 
-Split-pane terminals in a browser tab, with broadcast, keep-alive and a
-connection history. Standalone application and [ApexBuild](../ApexBuild) module
-at the same time.
+# ARES Terminal Console
+
+Split-pane terminals with broadcast, keep-alive and a connection history. One
+codebase, three ways to run it: a **desktop application** for Linux, macOS and
+Windows, a **Docker image** you open in a browser, and a module of the
+ApexBuild suite.
+
+*Formerly Apex Terminal. 2.0.0 is the rename, plus the desktop and Docker
+builds; a 1.x history folder is moved across on first start.*
+
+## Install
+
+| | |
+| --- | --- |
+| **Linux** | `ares-terminal-console_<v>_amd64.deb` (Debian, Ubuntu), `ares-terminal-console-<v>-1-x86_64.pkg.tar.zst` (Arch, `pacman -U`), or the `.tar.gz` with a per-user `./install.sh` that needs no root |
+| **macOS** (Apple silicon) | `ares-terminal-console-<v>-macos-arm64.dmg` — drag to Applications. Unsigned for now: the first launch is right-click → Open |
+| **Windows** | `ares-terminal-console-<v>-windows-x86_64-setup.exe` (no administrator rights needed), or the portable `.zip` |
+| **Docker** | `docker run -d -p 8080:8080 -v ares-terminal:/data docker.cybercontrol.tech/ares/terminal-console` |
+
+Releases are published, signed, to **ARES Repository**
+(<https://aresrepo.cybercontrol.tech>). They are not attached to the GitHub or
+GitLab release pages: the signed manifest on the repository is what proves a
+download is genuine, and a second copy would be a second thing to keep in step.
+
+### From source
 
 ```sh
 ./run.sh                # then open the URL it prints
@@ -132,19 +154,62 @@ is generally why you reach for one.
 
 ## Where it runs
 
-POSIX only. The standard library has a `pty` module on Linux and macOS and no
-equivalent on Windows, so there the app starts, serves its UI and says exactly
-that rather than pretending. A Windows port needs a ConPTY binding
-(`pywinpty`), which would be this app's only dependency.
+**Linux and macOS** use the standard library's `pty`. **Windows** uses ConPTY
+through `pywinpty`, which the Windows desktop build carries; the default shell
+there is PowerShell (`pwsh` when installed). Run from source on Windows without
+`pip install pywinpty` and the app starts, serves its UI and says why it cannot
+open a shell rather than pretending. The `ls`/`ll`/`la` colour wrappers are
+POSIX shell scripts and are not installed on Windows.
+
+## The desktop application
+
+The installed app runs the server on `127.0.0.1` on a free port and shows it in
+a window of its own: WebView2 on Windows, WKWebView on macOS, and on Linux an
+app window of Chrome, Chromium, Brave or Edge (the default browser if none is
+installed). Closing that window quits the app and ends its sessions, as closing
+a terminal emulator does. Starting it again while it runs opens another window
+onto the same sessions instead of a second server.
+
+Its data lives in `~/.local/share/ares-terminal-console` (Linux),
+`~/Library/Application Support/ARES Terminal Console` (macOS) or
+`%APPDATA%\ARES Terminal Console` (Windows). `--self-test` starts it on a
+temporary folder, proves a shell runs, and exits; every release build must pass
+it. Building: see [`packaging/`](packaging) and *Releasing* below.
+
+The command assistant needs `claude-agent-sdk`, which the desktop build does not
+bundle (it carries a platform-specific CLI of its own); there the ask bar says
+it is unavailable and everything else works.
+
+## Docker
+
+```sh
+docker run -d --name ares-terminal -p 8080:8080 -v ares-terminal:/data \
+    docker.cybercontrol.tech/ares/terminal-console:latest
+docker logs ares-terminal       # the link, with its access token
+```
+
+The shells run **inside the container**, as the unprivileged user `ares`, with
+bash, ssh, git, curl, dig, ping, jq, rsync and vim. What a pane can reach is
+what the container can reach, so give it the network and the mounts you mean it
+to have. Set `ARES_ACCESS_TOKEN` to choose the token, otherwise one is generated
+and kept in `/data/access-token`.
 
 ## Scope, stated plainly
 
-It binds loopback and has **no authentication of its own** — anything that can
-reach the port can open a shell as you. That is the same trust boundary as every
-other tool in the suite, and the reason the WebSocket checks `Origin` (browsers
-do not apply CORS to WebSocket handshakes, so without that check any page on the
-internet could open one). Keep it on 127.0.0.1. If you need it further away, put
-something that authenticates in front.
+On loopback, run from source or under ApexBuild, it has **no authentication of
+its own** — anything that can reach the port can open a shell as you. That is
+the same trust boundary as every other tool in the suite, and the reason the
+WebSocket checks `Origin` (browsers do not apply CORS to WebSocket handshakes,
+so without that check any page on the internet could open one).
+
+Anywhere else it requires an **access token**. Listening beyond loopback (the
+Docker image, or `--host 0.0.0.0`) turns it on by itself, and the desktop app
+always uses one, because every other user of a shared machine can reach a
+loopback port too. The token travels once in the link (`?token=…`), is swapped
+for an HttpOnly, SameSite=Strict cookie and redirected out of the address bar;
+`/api/health` is the one path that answers without it. A token is a shared
+secret, not a login: over anything but a private network, put TLS in front
+(`https://` origins are accepted on the WebSocket for exactly that).
 
 ## Part of ApexBuild
 
@@ -156,9 +221,13 @@ Two files make it a module, and neither changes how it behaves on its own:
 | `apexmod` | the uniform launcher: `info`, `check`, `run --host --port` |
 
 ```sh
-apex modules add /path/to/apex-terminal --link
+apex modules add /path/to/ares-terminal-console --link
 apex app
 ```
+
+The module id stays `terminal`, and `apexmodule.toml`, `apexmod` and the
+`APEX_SSO_*` sign-on variables keep their names: they are ApexBuild's contract
+with every module, not part of this app's brand.
 
 Under the suite it is framed by the shell on a sibling loopback port, so it
 names that one origin in `frame-ancestors` and nothing else. Standalone it
@@ -167,15 +236,37 @@ refuses framing entirely. See `docs/EMBEDDING.md` in the ApexBuild repository.
 ## Layout
 
 ```
-apex-terminal/
-├── apexmodule.toml      manifest
+ares-terminal-console/
+├── apexmodule.toml      manifest, and the one place the version lives
 ├── apexmod              launcher (info / check / run)
 ├── run.sh, run.ps1      standalone entry points
+├── Dockerfile           the browser-served image
+├── packaging/           desktop builds, installers, icons, release scripts
 └── app/
-    ├── server.py        HTTP, WebSocket upgrade, JSON API
+    ├── server.py        HTTP, WebSocket upgrade, JSON API, the access token
+    ├── desktop.py       the desktop window, one server per user, --self-test
     ├── websocket.py     RFC 6455 framing, and the keep-alive ping
-    ├── pty_session.py   PTYs, the scrollback ring, the session registry
+    ├── pty_session.py   PTYs (ConPTY on Windows), scrollback, the session registry
     ├── history.py       history, saved connections, redaction
     ├── shell_env.py     the colour scheme and the ls/ll/la wrappers
     └── static/          the UI (xterm.js vendored, no CDN)
 ```
+
+## Releasing
+
+PyInstaller does not cross-compile, so each platform builds on its own kind of
+machine. The version is `version` in `apexmodule.toml`; add its entry to
+`CHANGELOG.md` (the release notes are read from there), commit, then:
+
+```sh
+packaging/build-linux.sh           # .tar.gz and .deb, in a Debian 11 container (old glibc)
+packaging/build-arch.sh            # .pkg.tar.zst from that tarball (needs makepkg)
+packaging/build-remote.sh          # Windows .exe/.zip and macOS .dmg/.zip, on the build hosts
+packaging/release.sh --dry-run     # what would be published
+packaging/release.sh               # sign and publish to ARES Repository
+packaging/docker/docker-push.sh    # build, check and push the Docker image
+```
+
+`release.sh` reads its token and signing key from
+`~/.config/ares-repository/ares-terminal-console.env`; neither is ever in this
+repository.

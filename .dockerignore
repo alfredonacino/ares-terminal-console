@@ -1,0 +1,9 @@
+.git
+.venv
+venv
+build
+dist
+packaging
+__pycache__
+**/__pycache__
+*.pyc

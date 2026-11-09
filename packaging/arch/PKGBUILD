@@ -1,0 +1,30 @@
+# Maintainer: ARES <alfredo@nacino.net>
+# Binary package: repackages the frozen Linux build (dist/*-linux-x86_64.tar.gz).
+# Build it with packaging/build-arch.sh, which fills in pkgver and the checksum.
+pkgname=ares-terminal-console
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc="Split-pane terminals with broadcast, keep-alive, a connection history and a command assistant"
+arch=('x86_64')
+url="https://github.com/alfredonacino/ares-terminal-console"
+license=('LicenseRef-proprietary')
+depends=('glibc' 'zlib' 'hicolor-icon-theme')
+optdepends=('chromium: open the console in its own app window'
+            'google-chrome: open the console in its own app window'
+            'brave-bin: open the console in its own app window'
+            'xdg-utils: fall back to the default browser')
+# PyInstaller executables carry their archive after the ELF image: stripping corrupts them.
+options=('!strip' '!debug')
+source=("$pkgname-$pkgver-linux-$CARCH.tar.gz" "LICENSE")
+sha256sums=('@SHA256@' '@LICENSE_SHA256@')
+
+package() {
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  cd "$pkgname-$pkgver-linux-$CARCH"
+  install -d "$pkgdir/usr/lib" "$pkgdir/usr/bin"
+  cp -a "$pkgname" "$pkgdir/usr/lib/$pkgname"
+  ln -s "/usr/lib/$pkgname/$pkgname" "$pkgdir/usr/bin/$pkgname"
+  sed "s|@EXEC@|/usr/lib/$pkgname/$pkgname|" "$pkgname.desktop" |
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/$pkgname.desktop"
+  install -Dm644 "$pkgname.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/$pkgname.png"
+}

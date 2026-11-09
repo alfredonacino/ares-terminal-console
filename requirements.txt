@@ -1,4 +1,4 @@
-# Apex Terminal runs on the standard library alone. This file is the one
+# ARES Terminal Console runs on the standard library alone. This file is the one
 # exception, and it buys exactly one optional feature: the "ask" bar under the
 # terminal (app/agent.py).
 #

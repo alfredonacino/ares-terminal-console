@@ -1,5 +1,5 @@
 """
-Apex Terminal — the local backend.
+ARES Terminal Console — the local backend.
 
 Serves the UI, opens PTYs, and carries their bytes over WebSocket. Standard
 library only, Python 3.8+, because a terminal is what you reach for when a
@@ -45,7 +45,7 @@ from app.websocket import WebSocket, WebSocketClosed, is_upgrade  # noqa: E402
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 
-APP_NAME = "Apex Terminal"
+APP_NAME = "ARES Terminal Console"
 
 
 def _manifest_version(default: str = "0.0.0") -> str:
@@ -89,6 +89,64 @@ REGISTRY = pty_session.Registry()
 HISTORY = None          # set in serve()
 SHIMS = {}              # set in serve(): which wrapper commands exist
 EMBED_ORIGIN = ""
+
+# The access token. Empty on loopback under ApexBuild or ./run.sh, which is the
+# trust boundary the suite has always had. Set whenever the app listens beyond
+# loopback (the Docker image) and always in the desktop build, because every
+# other user on a shared machine can reach a loopback port too.
+#
+# It travels once in the URL (?token=...), is swapped for an HttpOnly cookie,
+# and is redirected out of the address bar -- the same shape as the sign-on
+# ticket, for the same reasons.
+ACCESS_TOKEN = ""
+TOKEN_PARAM = "token"
+TOKEN_COOKIE = "ares_terminal_console"
+# Paths that answer without the token: the health check a container
+# orchestrator polls, and nothing that touches a shell.
+OPEN_PATHS = ("/api/health",)
+
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+DATA_DIR_NAME = "ares-terminal-console"
+# Where 1.x kept its history. Moved over on first start so a rebrand does not
+# cost anybody their saved connections.
+LEGACY_DATA_DIR_NAME = "apex-terminal"
+
+
+def default_data_dir() -> str:
+    """The per-user data folder, and the 1.x one carried across if it exists."""
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
+        return os.path.join(base, APP_NAME)
+    if sys.platform == "darwin":
+        return os.path.expanduser(f"~/Library/Application Support/{APP_NAME}")
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    path = os.path.join(base, DATA_DIR_NAME)
+    legacy = os.path.join(base, LEGACY_DATA_DIR_NAME)
+    if not os.path.exists(path) and os.path.isdir(legacy):
+        try:
+            os.rename(legacy, path)
+        except OSError:
+            return legacy   # cannot move it: keep using it rather than lose it
+    return path
+
+
+def persistent_token(data_dir: str) -> str:
+    """A token kept in the data folder, so a link survives a restart."""
+    import secrets as _secrets
+    path = os.path.join(data_dir, "access-token")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            token = fh.read().strip()
+        if len(token) >= 24:
+            return token
+    except OSError:
+        pass
+    token = _secrets.token_urlsafe(32)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(token + "\n")
+    return token
 
 
 def now_iso() -> str:
@@ -145,7 +203,7 @@ def security_headers() -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ApexTerminal"
+    server_version = "ARESTerminalConsole"
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
@@ -228,8 +286,61 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         return True
 
+    def _cookie_token(self) -> str:
+        from http.cookies import CookieError, SimpleCookie
+        jar = SimpleCookie()
+        try:
+            jar.load(self.headers.get("Cookie", ""))
+        except CookieError:
+            return ""
+        morsel = jar.get(TOKEN_COOKIE)
+        return morsel.value if morsel else ""
+
+    def _authorized(self, path: str) -> bool:
+        """Whether this request may proceed. Sends the refusal itself if not.
+
+        With no token configured every request passes, which is the loopback
+        behaviour the suite has always had. Otherwise the cookie must match,
+        or the URL must carry the token -- in which case it is swapped for the
+        cookie and redirected out of the address bar.
+        """
+        import hmac as _hmac
+        if not ACCESS_TOKEN or path in OPEN_PATHS:
+            return True
+        if _hmac.compare_digest(self._cookie_token().encode(), ACCESS_TOKEN.encode()):
+            return True
+        offered = self._q1(TOKEN_PARAM)
+        if offered and self.command in ("GET", "HEAD") and \
+                _hmac.compare_digest(offered.encode(), ACCESS_TOKEN.encode()):
+            query = self._query()
+            query.pop(TOKEN_PARAM, None)
+            rest = urllib.parse.urlencode(query, doseq=True)
+            self.send_response(303)
+            self.send_header("Location", path + (("?" + rest) if rest else ""))
+            self.send_header("Set-Cookie", f"{TOKEN_COOKIE}={ACCESS_TOKEN}; Path=/; "
+                                           "HttpOnly; SameSite=Strict")
+            self.send_header("Content-Length", "0")
+            for k, v in security_headers().items():
+                self.send_header(k, v)
+            self.end_headers()
+            return False
+        if path.startswith("/api/") or path == "/ws":
+            self._json({"ok": False, "error": "access token required"}, status=401)
+        else:
+            self._send(401, (
+                "<!doctype html><meta charset=utf-8><title>ARES Terminal Console</title>"
+                "<body style='font:15px system-ui;background:#0d1117;color:#e6edf3;"
+                "padding:3rem'><h1 style='font-size:20px'>ARES Terminal Console</h1>"
+                "<p>This console needs its access token. Open the link printed when "
+                "it started (it ends in <code>?token=...</code>).</p>").encode(),
+                "text/html; charset=utf-8")
+        return False
+
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
+
+        if not self._authorized(path):
+            return
 
         if self._q1(sso.QUERY_PARAM) and self._accept_sso(path):
             return
@@ -267,6 +378,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlsplit(self.path).path
         body = self._body()
+
+        if not self._authorized(path):
+            return
 
         if path == "/api/sessions":
             if not pty_session.supported():
@@ -344,7 +458,10 @@ class Handler(BaseHTTPRequestHandler):
         # internet could open a socket to this port and get a shell. The two
         # origins that may: ourselves, and the ApexBuild shell framing us.
         origin = self.headers.get("Origin", "")
-        allowed = {f"http://{self.headers.get('Host', '')}"}
+        # https too: behind a TLS-terminating proxy the page is https://host
+        # while this server only ever sees plain HTTP.
+        host = self.headers.get('Host', '')
+        allowed = {f"http://{host}", f"https://{host}"}
         if EMBED_ORIGIN:
             allowed.add(EMBED_ORIGIN)
         if origin and origin not in allowed:
@@ -484,29 +601,30 @@ def _reaper():
         REGISTRY.reap()
 
 
-def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
-          embed_origin: str = "", open_browser: bool = False) -> int:
-    """Start the app and block until told to stop."""
-    global HISTORY, LEDGER
+def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
+          embed_origin: str = "", access_token: str = None):
+    """Configure the app and bind its socket. Returns (httpd, url).
 
-    if data_dir:
-        os.makedirs(data_dir, exist_ok=True)
-    else:
-        data_dir = os.path.join(
-            os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
-            "apex-terminal")
-        os.makedirs(data_dir, exist_ok=True)
+    The URL carries the access token when there is one, so it is the link to
+    hand a person. Nothing is served until serve_forever() is called on httpd;
+    serve() does that for the command line, the desktop shell on a thread.
+
+    access_token: None decides by itself -- a token is required whenever the
+    app listens beyond loopback, read from ARES_ACCESS_TOKEN or kept in the
+    data folder. "" turns it off; any other string is the token.
+    """
+    global HISTORY, LEDGER, SHIMS, SSO, ACCESS_TOKEN
+
+    data_dir = data_dir or default_data_dir()
+    os.makedirs(data_dir, exist_ok=True)
     HISTORY = History(os.path.join(data_dir, "history.json"))
     LEDGER = agent.Ledger(os.path.join(data_dir, "agent-costs.json"))
 
     # Colour. A pane is monochrome without both halves of this: a scheme in
     # LS_COLORS, and an `ls` that has been asked to use it. See shell_env.py.
-    global SHIMS
     SHIMS = shell_env.build_shims(os.path.join(data_dir, "bin"))
-    shims = SHIMS
     pty_session.set_shell_extras(shell_env.environment(os.path.join(data_dir, "bin")))
 
-    global SSO
     SSO = sso.from_environment("terminal")
     if SSO:
         log("INFO", "single sign-on enabled; tickets from the ApexBuild shell "
@@ -516,24 +634,46 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
         log("WARN", f"ignoring --embed-origin {embed_origin!r}: only a loopback "
                     "http origin such as http://127.0.0.1:8800 is accepted")
 
+    if access_token is None:
+        access_token = os.environ.get("ARES_ACCESS_TOKEN", "").strip()
+        if not access_token and host not in LOOPBACK_HOSTS:
+            access_token = persistent_token(data_dir)
+    ACCESS_TOKEN = access_token or ""
+
     httpd = Server((host, port), Handler)
     actual = httpd.server_address[1]
     browse_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
     url = f"http://{browse_host}:{actual}/"
+    if ACCESS_TOKEN:
+        url += f"?{TOKEN_PARAM}={urllib.parse.quote(ACCESS_TOKEN)}"
 
-    log("INFO", f"{APP_NAME} on {url}")
+    log("INFO", f"{APP_NAME} {APP_VERSION} on {url}")
     log("INFO", f"history: {HISTORY.path}")
-    if shims:
-        log("INFO", "colour: " + ", ".join(f"{k} -> {v}" for k, v in shims.items()))
-    else:
+    if SHIMS:
+        log("INFO", "colour: " + ", ".join(f"{k} -> {v}" for k, v in SHIMS.items()))
+    elif sys.platform != "win32":
         log("WARN", "no ls found; listings will not be coloured")
     if EMBED_ORIGIN:
         log("INFO", f"embedded: {EMBED_ORIGIN} may frame this app")
     if not pty_session.supported():
         log("WARN", pty_session.unsupported_reason())
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        log("WARN", f"listening on {host} — this app opens shells and has no "
-                    "authentication of its own. Keep it on loopback.")
+    if host not in LOOPBACK_HOSTS:
+        if ACCESS_TOKEN:
+            log("INFO", f"listening on {host}; the access token is required. "
+                        "Put TLS in front of this before it leaves a private network.")
+        else:
+            log("WARN", f"listening on {host} with the access token turned off -- "
+                        "anything that can reach this port can open a shell.")
+
+    threading.Thread(target=_reaper, name="reaper", daemon=True).start()
+    return httpd, url
+
+
+def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
+          embed_origin: str = "", open_browser: bool = False) -> int:
+    """Start the app and block until told to stop."""
+    httpd, url = start(host=host, port=port, data_dir=data_dir,
+                       embed_origin=embed_origin)
 
     def _shutdown(signum, frame):
         log("INFO", "shutting down; closing every session")
@@ -545,8 +685,6 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
             signal.signal(sig, _shutdown)
         except (ValueError, OSError):
             pass
-
-    threading.Thread(target=_reaper, name="reaper", daemon=True).start()
 
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

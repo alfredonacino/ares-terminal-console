@@ -1,5 +1,5 @@
 /*
-  Apex Terminal — panes, splits, broadcast.
+  ARES Terminal Console — panes, splits, broadcast.
 
   Three ideas hold this together.
 

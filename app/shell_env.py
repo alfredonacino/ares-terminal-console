@@ -28,6 +28,7 @@ else is still coloured and hidden files look like ordinary files.
 """
 
 import os
+import sys
 import shutil
 import stat
 from pathlib import Path
@@ -116,7 +117,7 @@ def eza_colors() -> str:
 # --------------------------------------------------------------------------
 
 _SHIM_HEADER = """#!/bin/sh
-# Written by Apex Terminal. Deleting this file only turns the colour back off.
+# Written by ARES Terminal Console. Deleting this file only turns the colour back off.
 #
 # On PATH ahead of the real {name} so that a listing is coloured without an
 # alias in your shell rc. --color=auto, never 'always': piped or redirected
@@ -140,6 +141,8 @@ def build_shims(bindir) -> dict:
     resolved from this machine's PATH, and a cached shim that points at an
     uninstalled tool is worse than no shim.
     """
+    if sys.platform == "win32":
+        return {}   # the wrappers are sh scripts; Windows shells have their own colour
     bindir = Path(bindir)
     bindir.mkdir(parents=True, exist_ok=True)
 
@@ -188,6 +191,8 @@ def environment(bindir) -> dict:
     they will turn off.
     """
     env = {}
+    if sys.platform == "win32":
+        return env
     if not os.environ.get("LS_COLORS"):
         env["LS_COLORS"] = ls_colors()
     if not os.environ.get("EZA_COLORS"):
