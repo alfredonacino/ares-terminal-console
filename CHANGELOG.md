@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.3.0]
 - Linux: the desktop app opens in a native Qt window (PySide6 + Qt WebEngine, bundled), like ARES Ultimate Console, instead of a Chrome/Chromium app window. It has its own name and icon in the task bar, keeps its layout between runs, sends other sites to the default browser, and needs no browser installed. F11 toggles full screen. `ARES_WINDOW=browser` brings back the browser window.
 
 ## [2.2.2]
