@@ -2,6 +2,10 @@
 # (its bundled 200 MB CLI is left out: the app uses your own signed-in Claude Code) and the freezer.
 # The app itself still runs on the standard library alone (see requirements.txt).
 pywebview==6.2.1; sys_platform == "win32" or sys_platform == "darwin"
+# Linux: a native Qt window, the toolkit of ARES Ultimate Console. 6.9 is the last release built for
+# glibc 2.28, so the Debian 11 builder can install it and the result still runs on older distributions.
+PySide6-Essentials==6.9.3; sys_platform == "linux"
+PySide6-Addons==6.9.3; sys_platform == "linux"
 pywinpty>=2.0.14; sys_platform == "win32"
 claude-agent-sdk>=0.2.152
 certifi

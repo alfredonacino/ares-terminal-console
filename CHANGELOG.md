@@ -1,5 +1,8 @@
 # Changelog
 
+## [Unreleased]
+- Linux: the desktop app opens in a native Qt window (PySide6 + Qt WebEngine, bundled), like ARES Ultimate Console, instead of a Chrome/Chromium app window. It has its own name and icon in the task bar, keeps its layout between runs, sends other sites to the default browser, and needs no browser installed. F11 toggles full screen. `ARES_WINDOW=browser` brings back the browser window.
+
 ## [2.2.2]
 - The server tools follow an `ssh` typed into a local pane: while the shell is logged in to a server, ◈ server and every tool work on that server over the pane's own login (a small `ssh` wrapper on local panes' PATH adds connection sharing for interactive logins); after `exit` they are back on this computer.
 - The wrapper directory is always put on PATH as an absolute path.

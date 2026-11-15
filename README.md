@@ -262,9 +262,13 @@ POSIX shell scripts and are not installed on Windows.
 ## The desktop application
 
 The installed app runs the server on `127.0.0.1` on a free port and shows it in
-a window of its own: WebView2 on Windows, WKWebView on macOS, and on Linux an
-app window of Chrome, Chromium, Brave or Edge (the default browser if none is
-installed). Closing that window quits the app and ends its sessions, as closing
+a window of its own: WebView2 on Windows, WKWebView on macOS, and on Linux a
+native Qt window (PySide6 and Qt WebEngine, bundled), the toolkit ARES Ultimate
+Console is built on, so it shows in the task bar under its own name and icon
+rather than as a browser. Links to other sites open in your default browser.
+Run from source without PySide6, it falls back to an app window of Chrome,
+Chromium, Brave or Edge, then to the default browser; `ARES_WINDOW=browser`
+asks for that fallback on purpose. Closing that window quits the app and ends its sessions, as closing
 a terminal emulator does. Starting it again while it runs opens another window
 onto the same sessions instead of a second server.
 

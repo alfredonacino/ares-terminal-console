@@ -133,7 +133,10 @@ def build_deb(tree: Path) -> Path:
     size_kb = sum(f.stat().st_size for f in root.rglob("*") if f.is_file() and not f.is_symlink()) // 1024
     control = (f"Package: {APP_ID}\nVersion: {VERSION}\nSection: utils\nPriority: optional\n"
                f"Architecture: {'amd64' if ARCH == 'x86_64' else ARCH}\nInstalled-Size: {size_kb}\n"
-               "Maintainer: ARES <alfredo@nacino.net>\nRecommends: chromium | google-chrome-stable | brave-browser\nSuggests: xdg-utils\n"
+               "Maintainer: ARES <alfredo@nacino.net>\nDepends: libnss3, libgbm1, libgl1, libegl1, libfontconfig1, libglib2.0-0, libdbus-1-3, "
+               "libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, "
+               "libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xkb1, libx11-xcb1, libxcomposite1, "
+               "libxdamage1, libxrandr2, libxtst6, libxkbfile1, libxshmfence1, libasound2\nSuggests: xdg-utils\n"
                f"Description: {APP_NAME}\n Split-pane terminals with broadcast, keep-alive, a connection history\n"
                " and a command assistant, in a desktop window.\n")
     work = BUILD / "stage" / "deb-ar"

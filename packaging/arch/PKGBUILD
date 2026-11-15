@@ -8,11 +8,12 @@ pkgdesc="Split-pane terminals with broadcast, keep-alive, a connection history a
 arch=('x86_64')
 url="https://github.com/alfredonacino/ares-terminal-console"
 license=('MIT')
-depends=('glibc' 'zlib' 'hicolor-icon-theme')
-optdepends=('chromium: open the console in its own app window'
-            'google-chrome: open the console in its own app window'
-            'brave-bin: open the console in its own app window'
-            'xdg-utils: fall back to the default browser')
+# The window is the bundled Qt WebEngine; these are what Qt takes from the system.
+depends=('glibc' 'gcc-libs' 'zlib' 'hicolor-icon-theme' 'nss' 'mesa' 'libglvnd' 'fontconfig' 'glib2' 'dbus'
+         'libxkbcommon' 'libxkbcommon-x11' 'xcb-util-cursor' 'xcb-util-wm' 'xcb-util-image'
+         'xcb-util-keysyms' 'xcb-util-renderutil' 'libxcomposite' 'libxdamage' 'libxrandr' 'libxtst'
+         'libxkbfile' 'libxshmfence' 'alsa-lib')
+optdepends=('xdg-utils: open links in the default browser')
 # PyInstaller executables carry their archive after the ELF image: stripping corrupts them.
 options=('!strip' '!debug')
 source=("$pkgname-$pkgver-linux-$CARCH.tar.gz" "LICENSE")

@@ -5,8 +5,10 @@ Runs the server on 127.0.0.1 on a free port, with an access token so that no
 other user of the machine can open a shell through it, and shows it in a window:
 
 * Windows and macOS: a native window (pywebview: WebView2 / WKWebView).
-* Linux: an app window of Chrome, Chromium, Brave or Edge when one is
-  installed, otherwise a tab of the default browser.
+* Linux: a native Qt window (PySide6 + QtWebEngine), the toolkit ARES Ultimate
+  Console is built on, with the app's own name and icon in the task bar. Run
+  from source without PySide6, it falls back to an app window of Chrome,
+  Chromium, Brave or Edge, and then to a tab of the default browser.
 
 The first copy owns the server. Starting the app again does not start a second
 server -- that would split your sessions across two processes -- it opens
@@ -114,6 +116,115 @@ def host_environment() -> None:
             os.environ.pop(var, None)
 
 
+def _icon_path() -> str:
+    for base in (getattr(sys, "_MEIPASS", None), Path(__file__).resolve().parent.parent / "packaging"):
+        if base:
+            f = Path(base) / "icons" / "ares.png"
+            if f.is_file():
+                return str(f)
+    return ""
+
+
+def _qt_window(url: str, d: Path, quit_event: threading.Event) -> bool:
+    """A native Qt window around the console, as ARES Ultimate Console is a Qt
+    application. False when PySide6 (with QtWebEngine) is not available."""
+    try:
+        from PySide6.QtCore import QTimer, QUrl
+        from PySide6.QtGui import QColor, QDesktopServices, QIcon, QKeySequence, QShortcut
+        from PySide6.QtWidgets import QApplication, QFileDialog
+        from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+    except Exception:
+        return False
+
+    origin = QUrl(url)
+
+    def ours(u) -> bool:
+        return u.scheme() in ("data", "blob", "about") or (
+            u.host() == origin.host() and u.port() == origin.port())
+
+    class Page(QWebEnginePage):
+        """Keeps the window on the console: any other address, and any link
+        meant for a new window, goes to the user's own browser."""
+
+        def acceptNavigationRequest(self, u, kind, is_main_frame):
+            if is_main_frame and not ours(u):
+                QDesktopServices.openUrl(u)
+                return False
+            return True
+
+        def createWindow(self, _type):
+            return _External(self.profile(), self)
+
+    class _External(QWebEnginePage):
+        def acceptNavigationRequest(self, u, kind, is_main_frame):
+            if u.isValid() and not u.isEmpty():
+                QDesktopServices.openUrl(u)
+            self.deleteLater()
+            return False
+
+    # Chromium inside a frozen bundle: the GPU process can fail on some
+    # drivers, which would leave a black window. Software is plenty for text.
+    os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu-compositing")
+    QApplication.setApplicationName(APP_NAME)
+    QApplication.setApplicationDisplayName(APP_NAME)
+    QApplication.setDesktopFileName(APP_ID)   # the Wayland app id, matches the .desktop entry
+    app = QApplication.instance() or QApplication([sys.argv[0]])
+    icon = _icon_path()
+    if icon:
+        app.setWindowIcon(QIcon(icon))
+
+    store = d / "qtwebengine"
+    store.mkdir(parents=True, exist_ok=True)
+    profile = QWebEngineProfile(APP_ID, app)   # named: kept on disk, so a layout survives a restart
+    profile.setPersistentStoragePath(str(store / "storage"))
+    profile.setCachePath(str(store / "cache"))
+    profile.setPersistentCookiesPolicy(QWebEngineProfile.AllowPersistentCookies)
+
+    def _download(item):
+        path, _ = QFileDialog.getSaveFileName(view, "Save", str(Path.home() / item.downloadFileName()))
+        if not path:
+            item.cancel()
+            return
+        item.setDownloadDirectory(str(Path(path).parent))
+        item.setDownloadFileName(Path(path).name)
+        item.accept()
+    profile.downloadRequested.connect(_download)
+
+    view = QWebEngineView()
+    page = Page(profile, view)
+    page.setBackgroundColor(QColor("#0d1117"))
+    st = page.settings()
+    st.setAttribute(QWebEngineSettings.JavascriptCanAccessClipboard, True)
+    if hasattr(QWebEngineSettings, "JavascriptCanPaste"):
+        st.setAttribute(QWebEngineSettings.JavascriptCanPaste, True)
+    st.setAttribute(QWebEngineSettings.LocalStorageEnabled, True)
+    view.setPage(page)
+    view.setWindowTitle(APP_NAME)
+    page.titleChanged.connect(lambda t: view.setWindowTitle(t or APP_NAME))
+    view.resize(1280, 820)
+    view.setMinimumSize(720, 480)
+    QShortcut(QKeySequence("Ctrl+Shift+R"), view, activated=view.reload)
+    QShortcut(QKeySequence("F11"), view,
+              activated=lambda: view.showNormal() if view.isFullScreen() else view.showFullScreen())
+    view.load(QUrl(url))
+    view.show()
+
+    # Wake the event loop now and then, so SIGTERM and Ctrl+C are noticed.
+    timer = QTimer(view)
+    timer.timeout.connect(lambda: app.quit() if quit_event.is_set() else None)
+    timer.start(300)
+    try:
+        app.exec()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        view.setPage(None)
+        page.deleteLater()
+        view.deleteLater()
+    return True
+
+
 def _browser_app_window(url: str, profile: Path):
     for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
                  "brave-browser", "brave", "microsoft-edge", "microsoft-edge-stable"):
@@ -162,6 +273,9 @@ def show(url: str, d: Path, quit_event: threading.Event) -> None:
             webview.start(private_mode=False, storage_path=str(d / "webview"))
             return
 
+    if sys.platform.startswith("linux") and os.environ.get("ARES_WINDOW") != "browser":
+        if _qt_window(url, d, quit_event):
+            return
     proc = _browser_app_window(url, d / "browser") if sys.platform.startswith("linux") else None
     if proc is not None:
         started = time.monotonic()
@@ -299,6 +413,26 @@ def self_test() -> int:
         checks.append((f"Claude Code lookup works ({cli or 'not installed here'})", True))
     except Exception as e:
         checks.append((f"Claude Code lookup works ({e!r})", False))
+
+    if sys.platform.startswith("linux"):
+        # That the window's modules and Chromium's helper arrived is what a
+        # freezer can get wrong, so that must pass. Whether this machine's
+        # graphics libraries can load Qt WebEngine is the machine's business
+        # (a build container's are older than a desktop's), so that is only
+        # reported: without it the app opens a browser window instead.
+        try:
+            from PySide6.QtCore import QLibraryInfo
+            where = QLibraryInfo.LibraryPath
+            found = (Path(QLibraryInfo.path(where.LibraryExecutablesPath)) / "QtWebEngineProcess").is_file() \
+                and any(Path(QLibraryInfo.path(where.LibrariesPath)).glob("libQt6WebEngineCore.so*"))
+        except Exception:
+            found = False
+        checks.append(("the Qt window is bundled (PySide6, Qt WebEngine, QtWebEngineProcess)", found))
+        try:
+            from PySide6 import QtWebEngineWidgets  # noqa: F401
+            print("INFO  this machine can open the Qt window")
+        except Exception as e:
+            print(f"INFO  this machine cannot load Qt WebEngine ({e}); the app would open a browser window")
 
     if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
         bundle = os.path.dirname(sys.executable)
