@@ -122,14 +122,20 @@ back a command that no longer connects.
 
 ## Server tools
 
-A pane running `ssh …` gets a **◈ server** button (or `Ctrl+Shift+X`). It opens
-seven tools for the machine on the other end, brought over from ARES Ultimate
-Console and TractorBeam. Any other pane gets **◈ system**, which opens the same
-seven tools for this computer, running the same read-only scripts in the local
-shell (the one exception: its Stop refuses the app's own process).
+The focused pane carries a small card floating in the top-right corner of its
+terminal, as on TractorBeam's SSH tab: the machine's name and OS, and the
+seven tools brought over from ARES Ultimate Console and TractorBeam. On a pane
+running `ssh …` they work on the machine on the other end (**◈ server**); on
+any other pane on this computer (**◈ system**), running the same read-only
+scripts in the local shell (the one exception: its Stop refuses the app's own
+process). `Ctrl+Shift+X` opens them from the keyboard.
+
+**▸** folds the card down to a single **◈ server ◂** / **◈ system ◂** button in
+the same corner, out of the terminal's way until it is wanted; **◂** brings it
+back. The choice holds for every pane and is remembered between runs.
 
 The tools also follow an `ssh` typed into a local pane: while that pane's
-shell is logged in to a server, the button reads **◈ server** and every tool
+shell is logged in to a server, the card reads **◈ server** and every tool
 works on that server; after `exit` they are back on this computer. Local
 panes get a small `ssh` wrapper on PATH (beside the `ls` colour wrappers)
 that adds the same connection sharing as ⇄ connect, so a password or

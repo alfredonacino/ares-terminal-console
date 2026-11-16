@@ -184,7 +184,7 @@ class Pane {
     queueMicrotask(() => this.showTitle());
     this.tagEl = el("span", { class: "pane-tag idle", hidden: true, text: "anti-idle" });
     this.dotEl = el("span", { class: "pane-dot" });
-    this.bodyEl = el("div", { class: "pane-body" });
+    this.bodyEl = el("div", { class: "pane-body" }, this.dockEl);
 
     const node = el("div", {
       class: "pane",
@@ -198,7 +198,6 @@ class Pane {
         this.tagEl,
         el("button", { class: "pane-cmds", title: "Commands sent to this pane",
                        onClick: (e) => { e.stopPropagation(); showCommandsFor(this); } }, "⌘"),
-        this.toolsEl,
         el("button", { class: "icon-btn", title: "Split vertical",
                        onClick: (e) => { e.stopPropagation(); splitPane(this.id, "v"); } }, "⬒"),
         el("button", { class: "icon-btn", title: "Close pane",
@@ -352,17 +351,48 @@ class Pane {
     this.showWhere();
   }
 
-  /* ◈ server on an SSH pane, or on a local pane whose shell has run `ssh`
-     (the tools follow it there); ◈ system on any other local pane. */
+  /* The server tools, the way TractorBeam's SSH tab shows them: a card
+     floating in the top-right corner of the focused pane's terminal, naming
+     the machine and listing the seven tools. ◈ server on an SSH pane, or on a
+     local pane whose shell has run `ssh` (the tools follow it there);
+     ◈ system on any other local pane. Folded, it is only that label. */
+  toolsDest() { return this.session.ssh || (this.where && this.where.hop) || ""; }
+
   showTools() {
-    if (!this.toolsEl) {
-      this.toolsEl = el("button", { class: "pane-tools",
-        onClick: (e) => { e.stopPropagation(); openInsight(this); } });
+    if (!this.dockEl) this.dockEl = buildDock(this);
+    const dest = this.toolsDest();
+    this.dockUnfold.textContent = (dest ? "◈ server" : "◈ system") + " ◂";
+    this.dockUnfold.title = (dest ? `Show the server tools for ${dest}` : "Show the system tools for this computer") +
+      " (Ctrl+Shift+X opens them)";
+    if ((dest || "local") !== this.dockFor) this.identifyDock();
+  }
+
+  /* Who the machine is, for the card's head. Asked only for the pane on
+     screen with the card open, and once per machine: the server keeps the
+     answer, and a failure is retried at most once a minute. */
+  async identifyDock() {
+    if (this.dead || !this.el || state.focus !== this.id || dockFolded()) return;
+    const dest = this.toolsDest() || "local";
+    if (this.dockFor === dest && !(this.dockFailed && Date.now() - this.dockFailed > 60_000)) return;
+    this.dockFor = dest;
+    this.dockFailed = 0;
+    const [name, sub] = this.dockIdEls;
+    name.textContent = dest === "local" ? "This computer" : dest;
+    sub.textContent = "identifying…";
+    sub.title = "";
+    try {
+      const id = await api(`/api/insight/${encodeURIComponent(this.session.id)}/identity`);
+      if (this.dockFor !== dest) return;
+      name.textContent = id.hostname || (id.local ? "This computer" : id.connection);
+      sub.textContent = [id.os_name, id.local ? "this computer" : id.connection].filter(Boolean).join(" · ");
+      sub.title = [`Identity: ${id.uid}`, id.kernel && `Kernel: ${id.kernel}`,
+        (id.addresses || []).length && `Addresses: ${id.addresses.join(", ")}`].filter(Boolean).join("\n");
+    } catch (e) {
+      if (this.dockFor !== dest) return;
+      this.dockFailed = Date.now();
+      sub.textContent = "not identified yet";
+      sub.title = e.message || String(e);
     }
-    const dest = this.session.ssh || (this.where && this.where.hop) || "";
-    this.toolsEl.textContent = dest ? "◈ server" : "◈ system";
-    this.toolsEl.title = (dest ? `Server tools for ${dest}` : "System tools for this computer") +
-      " (Ctrl+Shift+X)";
   }
 
   showWhere() {
@@ -515,6 +545,7 @@ function render() {
     pane.el.classList.toggle("focus", pane.id === state.focus);
     if (pane.el.isConnected) pane.mounted();
   }
+  state.panes.get(state.focus)?.identifyDock();
   document.body.classList.toggle("syncing", state.sync);
 
   const live = [...state.panes.values()].filter((p) => !p.dead).length;
@@ -645,8 +676,63 @@ function focusPane(paneId) {
   }
   const pane = state.panes.get(paneId);
   if (pane && Date.now() - pane.whereAt > 10_000) pane.scheduleWhere(100);
+  if (pane) pane.identifyDock();
   saveLayout();
 }
+
+/* ------------------------------------------------------- the tools card
+
+   One card per pane, shown on the focused one (CSS), so a screen of splits
+   carries one card and not nine. Folding is one preference for every pane,
+   remembered: it is about how much terminal the operator wants to see, and a
+   card that came back on every focus change would be folded again each time. */
+
+const DOCK_KEY = "atc_tools_dock_folded_v1";
+const dockFolded = () => document.body.classList.contains("dock-folded");
+
+function buildDock(pane) {
+  const name = el("b", { class: "sd-name" });
+  const sub = el("span", { class: "sd-sub" });
+  pane.dockIdEls = [name, sub];
+  pane.dockUnfold = el("button", { class: "sd-unfold", type: "button", "aria-expanded": "false",
+                                   onClick: (e) => { e.stopPropagation(); setDockFolded(false); } });
+  // TOOLS lives in insight.js; panes are built after both scripts have run.
+  const checks = el("div", { class: "sd-checks" }, TOOLS.map((t) =>
+    el("button", { type: "button", title: TOOL_HINTS[t.key] || t.label,
+                   onClick: (e) => { e.stopPropagation(); openInsight(pane, t.key); } },
+      el("span", { class: "sd-ic", text: t.icon }), t.label)));
+  return el("div", { class: "srv-dock" },
+    el("div", { class: "sd-head" },
+      el("span", { class: "sd-id" }, name, sub),
+      el("button", { class: "sd-fold", type: "button", title: "Hide the tools",
+                     "aria-label": "Hide the tools", "aria-expanded": "true",
+                     onClick: (e) => { e.stopPropagation(); setDockFolded(true, e.detail ? pane : null); } }, "▸")),
+    checks, pane.dockUnfold);
+}
+
+const TOOL_HINTS = {
+  health: "Live CPU, memory, disks, network, the top processes and who is connected — with a Stop button per process",
+  perf: "What is behind high CPU, load or memory: a sampled analysis",
+  logs: "Error lines in the journal and in recent log files, grouped into recurring patterns",
+  ai: "A diagnosis of those error patterns by Claude — you see exactly what is sent first",
+  pkgs: "Installed packages, recognised technologies and listening ports",
+  vulns: "Pending security updates, support status, weak settings, and known vulnerabilities on request",
+  hist: "Every check run on this machine, kept against its own identity",
+};
+
+/* Folded with the mouse means "get out of the way of the terminal", and the
+   click that did it took the keyboard away from it, so hand it back. From the
+   keyboard (e.detail 0) focus stays put, or someone tabbing would be stranded. */
+function setDockFolded(folded, refocus = null) {
+  document.body.classList.toggle("dock-folded", folded);
+  try { localStorage.setItem(DOCK_KEY, folded ? "1" : "0"); } catch (_) { /* private mode */ }
+  if (folded) { if (refocus) refocus.term.focus(); return; }
+  state.panes.get(state.focus)?.identifyDock();
+}
+
+try {
+  document.body.classList.toggle("dock-folded", localStorage.getItem(DOCK_KEY) === "1");
+} catch (_) { /* unfolded */ }
 
 /* -------------------------------------------------------------------- tabs
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## [Unreleased]
+- The server tools are a card floating in the top-right corner of the focused pane's terminal, as on TractorBeam's SSH tab: the machine's name and OS, and the seven tools one click away, instead of the ◈ button in the pane's title bar. ▸ folds it to a single ◈ server / ◈ system button, for every pane, remembered between runs.
+
 ## [2.3.0]
 - Linux: the desktop app opens in a native Qt window (PySide6 + Qt WebEngine, bundled), like ARES Ultimate Console, instead of a Chrome/Chromium app window. It has its own name and icon in the task bar, keeps its layout between runs, sends other sites to the default browser, and needs no browser installed. F11 toggles full screen. `ARES_WINDOW=browser` brings back the browser window.
 
