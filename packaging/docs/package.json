@@ -1,0 +1,8 @@
+{
+  "name": "ares-terminal-console-docs",
+  "private": true,
+  "description": "Builds the executive presentation (.pptx). Used by packaging/build-docs.sh only; the app does not need it.",
+  "dependencies": {
+    "pptxgenjs": "3.12.0"
+  }
+}

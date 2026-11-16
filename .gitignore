@@ -7,3 +7,4 @@ build/
 *.egg-info/
 history.json
 .DS_Store
+node_modules/

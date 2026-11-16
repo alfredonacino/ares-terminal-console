@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARES Terminal Executive Presentation</title>
+<link rel="icon" href="../app/static/brand/ares-terminal-icon.svg" type="image/svg+xml">
+<style>
+/* 16:9 slides; one slide per printed page. Speaker notes are in EXECUTIVE-PRESENTATION.md,
+   and the PowerPoint built from the same slides (packaging/docs/presentation.js) carries them too. */
+:root {
+  --bg: #070b15; --panel: #101a2c; --panel-2: #16233a; --line: #23324d;
+  --text: #eef3fb; --muted: #93a6c6; --accent: #22d3ee; --accent-2: #b14cff; --ok: #2ee59d; --warn: #ffb020;
+  --sans: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", "DejaVu Sans Mono", Consolas, monospace;
+}
+@page { size: 1280px 720px; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #03050a; color: var(--text); font-family: var(--sans); }
+.slide {
+  width: 1280px; height: 720px; margin: 24px auto; position: relative; overflow: hidden;
+  padding: 72px 88px 64px; background: radial-gradient(circle at 18% 12%, rgba(34,211,238,.13), transparent 45%), radial-gradient(circle at 92% 90%, rgba(177,76,255,.17), transparent 50%), var(--bg);
+  page-break-after: always; break-after: page;
+}
+@media print { html, body { background: var(--bg); } .slide { margin: 0; } }
+.slide::after { content: attr(data-n); position: absolute; right: 40px; bottom: 28px; font-size: 15px; color: var(--muted); letter-spacing: .1em; }
+.slide .mark { position: absolute; left: 40px; bottom: 20px; height: 30px; opacity: .9; }
+.eyebrow { font-size: 18px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 0 0 14px; }
+h1 { font-size: 64px; line-height: 1.05; margin: 0 0 20px; font-weight: 800; }
+h2 { font-size: 46px; line-height: 1.1; margin: 0 0 34px; font-weight: 800; }
+.grad { color: var(--accent); }
+p.lead { font-size: 28px; color: var(--muted); margin: 0 0 30px; max-width: 900px; line-height: 1.35; }
+ul.big { list-style: none; padding: 0; margin: 0; font-size: 27px; line-height: 1.4; }
+ul.big li { padding: 12px 0 12px 44px; position: relative; border-bottom: 1px solid var(--line); }
+ul.big li:last-child { border-bottom: 0; }
+ul.big li::before { content: ""; position: absolute; left: 6px; top: 25px; width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+b, strong { color: #fff; }
+code { font-family: var(--mono); font-size: .86em; color: var(--accent); }
+.cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.cols.four { grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.cols.two { grid-template-columns: repeat(2, 1fr); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px 24px 20px; }
+.card .k { font-size: 50px; font-weight: 800; }
+.card .l { font-size: 20px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
+.card h3 { font-size: 25px; margin: 10px 0 8px; }
+.card p { font-size: 19px; color: var(--muted); margin: 0; line-height: 1.4; }
+.glyph { font-size: 36px; color: var(--accent); font-family: var(--mono); font-weight: 700; }
+table { border-collapse: collapse; width: 100%; font-size: 23px; }
+td { padding: 15px 18px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:first-child { color: var(--accent); font-weight: 700; white-space: nowrap; width: 300px; }
+.flow { display: flex; align-items: center; gap: 16px; margin-top: 26px; }
+.flow .card { flex: 1; text-align: center; min-height: 200px; }
+.arrow { font-size: 40px; color: var(--accent); }
+.title-slide { display: grid; grid-template-columns: 380px 1fr; align-items: center; gap: 56px; }
+.title-slide img { width: 380px; height: 380px; }
+.env { display: inline-block; font-size: 21px; padding: 10px 16px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); margin: 6px 10px 0 0; }
+.env b { color: var(--ok); margin-right: 8px; }
+.note { font-size: 20px; color: var(--muted); margin-top: 26px; }
+.term { background: #050911; border: 1px solid var(--line); border-radius: 14px; font-family: var(--mono); font-size: 20px; line-height: 1.6; padding: 20px 24px; color: #cfe0f5; }
+.term .p { color: var(--ok); } .term .q { color: var(--muted); } .term .c { color: #fff; } .term .ins { float: right; color: var(--accent); font-size: 15px; letter-spacing: .12em; border: 1px solid var(--accent); border-radius: 6px; padding: 1px 8px; }
+.amber { color: var(--warn); }
+.split { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: start; }
+</style>
+</head>
+<body>
+
+<section class="slide" data-n="01">
+  <div class="title-slide">
+    <img src="../app/static/brand/ares-terminal-icon.svg" alt="">
+    <div>
+      <p class="eyebrow">ARES Application Suite</p>
+      <h1>ARES <span class="grad">Terminal</span> Console</h1>
+      <p class="lead">The terminal for the people who run our servers: it remembers, diagnoses, and never acts on its own.</p>
+      <div><span class="env"><b>DESKTOP</b>Linux · macOS · Windows</span><span class="env"><b style="color:var(--accent)">DOCKER</b>ares/terminal-console</span></div>
+      <p class="note">Version 2.3.0 · 16 November 2026 · Alfredo Nacino</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-n="02">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">The problem</p>
+  <h2>Server work happens in plain terminals</h2>
+  <ul class="big">
+    <li><b>Nothing records</b> what was run, or on which machine.</li>
+    <li>Diagnosing a server means <b>copying scripts across</b> or opening other tools.</li>
+    <li>A change on several servers is done <b>one at a time</b>, or with a risky shortcut.</li>
+    <li>AI tools that "just run it" are <b>the wrong fit</b> for production machines.</li>
+  </ul>
+</section>
+
+<section class="slide" data-n="03">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">The solution</p>
+  <h2>One window for the whole job</h2>
+  <div class="cols four">
+    <div class="card"><div class="glyph">▥</div><h3>Panes &amp; tabs</h3><p>Splits like tmux, one tab per connection, broadcast when you mean it.</p></div>
+    <div class="card"><div class="glyph">⌘</div><h3>The record</h3><p>Every connection and command, with time, pane and server.</p></div>
+    <div class="card"><div class="glyph">◈</div><h3>Server tools</h3><p>Seven read-only diagnostics on any SSH pane.</p></div>
+    <div class="card"><div class="glyph">✦</div><h3>Assistant</h3><p>Suggests the command. A person presses Enter.</p></div>
+  </div>
+  <p class="note">Formerly Apex Terminal. Desktop app, Docker image and ApexBuild module from one codebase.</p>
+</section>
+
+<section class="slide" data-n="04">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Panes, tabs and broadcast</p>
+  <h2>Many machines, <span class="amber">one deliberate keystroke</span></h2>
+  <div class="split">
+    <ul class="big">
+      <li><code>Ctrl+Shift+D</code> / <code>E</code> splits; closing a pane closes the gap.</li>
+      <li>One tab per connection; the layout survives a reload.</li>
+      <li><b>Broadcast</b> sends every key to every pane in the tab.</li>
+    </ul>
+    <div class="card" style="border-color:var(--warn)"><div class="k amber">AMBER</div><div class="l">The whole window stays amber while broadcast is on, because forgetting it is how a command meant for one machine runs on nine.</div></div>
+  </div>
+</section>
+
+<section class="slide" data-n="05">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Nothing is lost</p>
+  <h2>Sessions outlive the window</h2>
+  <div class="cols">
+    <div class="card"><div class="k grad">256 KB</div><div class="l">of scrollback replayed when you reopen: the command kept running.</div></div>
+    <div class="card"><div class="k grad">20 s</div><div class="l">keep-alive ping, so proxies and power managers don't drop the link.</div></div>
+    <div class="card"><div class="k grad" style="font-size:38px;line-height:1.3">host · IP · dir</div><div class="l">on every pane's bar: which machine am I on, before every command.</div></div>
+  </div>
+  <p class="note">Optional anti-idle keeps the far end from timing out a quiet session. Off by default, and the pane says when it is on.</p>
+</section>
+
+<section class="slide" data-n="06">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">The record</p>
+  <h2>What was run, where, and when</h2>
+  <table>
+    <tr><td>Commands</td><td>Every command line sent, with time, pane and server. Searchable; <b>Insert</b> puts one back on a prompt.</td></tr>
+    <tr><td>Servers</td><td>Every SSH destination: sessions, durations, commands sent. <b>Connect</b> reopens it.</td></tr>
+    <tr><td>History</td><td>Every connection opened; name one to keep it under <b>Saved</b>.</td></tr>
+    <tr><td>Never stored</td><td>Passwords: input that wasn't echoed is skipped, and <code>--password</code>-style secrets are blanked.</td></tr>
+  </table>
+</section>
+
+<section class="slide" data-n="07">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Server tools · ◈ server · Ctrl+Shift+X</p>
+  <h2>Seven diagnostics, one click from the problem</h2>
+  <div class="cols four" style="row-gap:18px">
+    <div class="card"><div class="glyph">♥</div><h3>Health</h3><p>CPU, memory, disk, load, network; top processes.</p></div>
+    <div class="card"><div class="glyph">⚡</div><h3>Performance</h3><p>What is slow, and why.</p></div>
+    <div class="card"><div class="glyph">☰</div><h3>Logs</h3><p>Errors grouped and counted.</p></div>
+    <div class="card"><div class="glyph">✦</div><h3>AI log analysis</h3><p>Verdict, cause, first command.</p></div>
+    <div class="card"><div class="glyph">▤</div><h3>Packages</h3><p>Runtimes, servers, databases.</p></div>
+    <div class="card"><div class="glyph">⛨</div><h3>Vulnerabilities</h3><p>Security updates, CVEs (OSV.dev).</p></div>
+    <div class="card"><div class="glyph">↺</div><h3>History</h3><p>Every scan of this machine.</p></div>
+    <div class="card" style="background:transparent;border-style:dashed"><h3 style="margin-top:0">◈ system</h3><p>The same seven for this computer.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="08">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Nothing installed, nothing changed</p>
+  <h2>The tools ride the login you already typed</h2>
+  <div class="flow">
+    <div class="card"><div class="glyph">⌨</div><h3>Pane</h3><p><code>ssh admin@db1</code>: password or one-time code typed <b>once</b>.</p></div>
+    <div class="arrow">→</div>
+    <div class="card"><div class="glyph">⇄</div><h3>Shared connection</h3><p>OpenSSH multiplexing: no second login, no second prompt.</p></div>
+    <div class="arrow">→</div>
+    <div class="card"><div class="glyph">$_</div><h3>Read-only probe</h3><p><code>sh -s</code>: nothing copied, nothing left behind.</p></div>
+  </div>
+  <p class="note">A server is recognised by its machine identity, so the same box by name, IP or jump host has one history.</p>
+</section>
+
+<section class="slide" data-n="09">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">The assistant</p>
+  <h2>AI proposes, a person decides</h2>
+  <div class="split">
+    <div class="term">
+      <div><span class="q">ask</span> <span class="c">what is listening on port 8443?</span></div>
+      <div style="margin-top:14px"><span class="p">$</span> ss -ltnp 'sport = :8443' <span class="ins">INSERT</span></div>
+      <div><span class="p">$</span> sudo lsof -iTCP:8443 -sTCP:LISTEN <span class="ins">INSERT</span></div>
+      <div class="q" style="margin-top:14px;font-size:16px">$0.0121 · 908 in / 181 out · included in subscription</div>
+    </div>
+    <ul class="big">
+      <li>The agent has <b>no tools</b> and no permission to use any.</li>
+      <li><b>INSERT</b> puts the command at the prompt, <b>without Enter</b>.</li>
+      <li>Runs on your <b>Claude subscription</b>; no API key in the app.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="slide" data-n="10">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Consent and security</p>
+  <h2>Nothing leaves without being seen first</h2>
+  <div class="cols two">
+    <div class="card"><h3 style="margin-top:0">Before AI or OSV.dev</h3><p>The exact text is shown first, with secrets as <code>***</code>, no address and no server identity. It's sent only on <b>Send</b>.</p></div>
+    <div class="card"><h3 style="margin-top:0">Access token</h3><p>The desktop app and Docker image always require one. It becomes an HttpOnly, SameSite=Strict cookie.</p></div>
+    <div class="card"><h3 style="margin-top:0">No web page can open a shell</h3><p>WebSocket <code>Origin</code> is checked, and framing is refused except by ApexBuild.</p></div>
+    <div class="card"><h3 style="margin-top:0">Data stays local</h3><p>History and reports live on the operator's computer. Nothing goes to a central service.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="11">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Where it runs</p>
+  <h2>One codebase, three ways to run it</h2>
+  <table>
+    <tr><td>Desktop</td><td>Linux (native Qt window, .deb, Arch, tarball) · macOS Apple silicon · Windows (ConPTY, PowerShell)</td></tr>
+    <tr><td>Docker</td><td>The console in a browser; shells inside the container as an unprivileged user</td></tr>
+    <tr><td>ApexBuild</td><td>The <code>terminal</code> module, signed in by the suite</td></tr>
+    <tr><td>From source</td><td>Python 3.11 and <b>nothing else</b>: it opens on a machine already in trouble</td></tr>
+  </table>
+  <p class="note">Releases are signed and published to ARES Repository; every build must pass <code>--self-test</code>.</p>
+</section>
+
+<section class="slide" data-n="12">
+  <img class="mark" src="../app/static/brand/ares-terminal-logo-dark.svg" alt="">
+  <p class="eyebrow">Status and next steps</p>
+  <h2>In daily use; the open items are polish</h2>
+  <div class="cols">
+    <div class="card"><div class="k" style="color:var(--ok)">2.3.0</div><div class="l">Released: native Linux window. 2.2.x added server tools, tabs and the command record.</div></div>
+    <div class="card"><div class="k amber">macOS</div><div class="l">Decision: fund an Apple Developer ID to remove the right-click on first launch.</div></div>
+    <div class="card"><div class="k grad">Docker</div><div class="l">Recommendation: private network or behind TLS only. A token is not a personal login.</div></div>
+  </div>
+  <p class="note">On Windows the server tools need an SSH key or agent, because its OpenSSH can't share a connection.</p>
+</section>
+
+</body>
+</html>

@@ -1,44 +1,51 @@
-"""Draw the ARES Terminal Console icon and write every format the installers need.
+"""Render the ARES Terminal Console icon into every format the installers need.
 
-    python packaging/make_icons.py      # packaging/icons/ares.{png,ico,icns}, ares-256.png
+    python packaging/make_icons.py
 
-Needs Pillow, at icon-making time only; the app itself does not.
+The drawing is app/static/brand/ares-terminal-icon.svg; this only rasterises it:
+
+    packaging/icons/ares.png (512), ares-256.png, ares.ico, ares.icns
+    app/static/icon.png (256, the page icon), app/static/brand/*.png
+
+Needs rsvg-convert (librsvg) and Pillow, at icon-making time only; the app
+itself needs neither.
 """
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
-OUT = Path(__file__).resolve().parent / "icons"
-NAVY, PANEL, ACCENT, WHITE = (13, 17, 23), (22, 27, 34), (177, 76, 255), (236, 240, 246)
+ROOT = Path(__file__).resolve().parent.parent
+BRAND = ROOT / "app" / "static" / "brand"
+OUT = ROOT / "packaging" / "icons"
 
 
-def draw(size: int = 1024) -> Image.Image:
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    s = size / 1024
-    d.rounded_rectangle([40 * s, 40 * s, 984 * s, 984 * s], radius=200 * s, fill=NAVY)
-    # A terminal window: title bar with three dots, then the prompt.
-    d.rounded_rectangle([140 * s, 200 * s, 884 * s, 824 * s], radius=60 * s, fill=PANEL,
-                        outline=ACCENT, width=int(22 * s))
-    d.line([(150 * s, 300 * s), (874 * s, 300 * s)], fill=ACCENT, width=int(14 * s))
-    for i, x in enumerate((215, 275, 335)):
-        d.ellipse([(x - 20) * s, 230 * s, (x + 20) * s, 270 * s],
-                  fill=ACCENT if i == 0 else (90, 60, 130))
-    w = int(56 * s)
-    d.line([(270 * s, 430 * s), (430 * s, 560 * s), (270 * s, 690 * s)], fill=WHITE,
-           width=w, joint="curve")
-    d.rounded_rectangle([490 * s, 650 * s, 740 * s, 706 * s], radius=14 * s, fill=ACCENT)
-    return img
+def render(svg: Path, png: Path, width: int, height: int = 0) -> None:
+    args = ["rsvg-convert", "-w", str(width)] + (["-h", str(height)] if height else [])
+    subprocess.run(args + [str(svg), "-o", str(png)], check=True)
 
 
 def main() -> None:
+    if not shutil.which("rsvg-convert"):
+        raise SystemExit("rsvg-convert not found (install librsvg)")
     OUT.mkdir(exist_ok=True)
-    img = draw()
-    img.resize((512, 512), Image.LANCZOS).save(OUT / "ares.png")
-    img.resize((256, 256), Image.LANCZOS).save(OUT / "ares-256.png")
-    img.save(OUT / "ares.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-    img.save(OUT / "ares.icns")
-    print("wrote", ", ".join(sorted(p.name for p in OUT.iterdir())))
+    icon = BRAND / "ares-terminal-icon.svg"
+    with tempfile.TemporaryDirectory() as tmp:
+        big = Path(tmp) / "icon-1024.png"
+        render(icon, big, 1024, 1024)
+        img = Image.open(big).convert("RGBA")
+        img.resize((512, 512), Image.LANCZOS).save(OUT / "ares.png")
+        img.resize((256, 256), Image.LANCZOS).save(OUT / "ares-256.png")
+        img.resize((256, 256), Image.LANCZOS).save(ROOT / "app" / "static" / "icon.png")
+        img.save(OUT / "ares.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+        img.save(OUT / "ares.icns")
+    for size in (512, 192, 64):
+        render(icon, BRAND / f"ares-terminal-icon-{size}.png", size, size)
+    for variant in ("light", "dark"):
+        render(BRAND / f"ares-terminal-logo-{variant}.svg", BRAND / f"ares-terminal-logo-{variant}.png", 880)
+    print("wrote", ", ".join(sorted(p.name for p in OUT.iterdir())), "+ app/static/icon.png, app/static/brand/*.png")
 
 
 if __name__ == "__main__":

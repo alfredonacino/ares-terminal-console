@@ -1,0 +1,557 @@
+<title>ARES Terminal Blueprint</title>
+<link rel="icon" href="../app/static/brand/ares-terminal-icon.svg" type="image/svg+xml">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: drafting sheets stacked on a blueprint grid, each with a sheet number, a drawing and its notes. */
+:root {
+  --paper: #F2F5F9;      /* drafting film, cool white */
+  --sheet: #FBFCFE;
+  --ink: #15335C;        /* drawing ink */
+  --muted: #4E6584;
+  --rule: #B4C4D8;
+  --grid: rgba(21, 51, 92, .06);
+  --panel: #E7EEF7;
+  --accent: #C2410C;     /* revision ink: the path that matters */
+  --accent-soft: rgba(194, 65, 12, .1);
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+  --sans: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0B1E38; --sheet: #0F2747; --ink: #E4EDF8; --muted: #A3B8D3; --rule: #36557D;
+    --grid: rgba(164, 196, 235, .07); --panel: #15335C; --accent: #FF9B5E; --accent-soft: rgba(255, 155, 94, .14);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0B1E38; --sheet: #0F2747; --ink: #E4EDF8; --muted: #A3B8D3; --rule: #36557D;
+  --grid: rgba(164, 196, 235, .07); --panel: #15335C; --accent: #FF9B5E; --accent-soft: rgba(255, 155, 94, .14);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font: 15px/1.6 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 1.6rem; font-weight: 600; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: .86em; }
+a { color: var(--ink); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Title block, as on a drawing */
+.titleblock { background: var(--sheet); border: 2px solid var(--ink); display: grid; grid-template-columns: 2fr 1fr; }
+.tb-main { padding: 24px 28px; display: flex; flex-direction: column; gap: 12px; border-right: 2px solid var(--ink); min-width: 0; }
+.tb-main .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.tb-main p { color: var(--muted); }
+.tb-cells { display: grid; grid-template-columns: 1fr 1fr; }
+.tb-cells div { padding: 10px 14px; border-bottom: 1px solid var(--rule); border-right: 1px solid var(--rule); min-width: 0; }
+.tb-cells div:nth-child(2n) { border-right: none; }
+.tb-cells div:nth-last-child(-n+2) { border-bottom: none; }
+.tb-cells dt { font: 600 10px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.tb-cells dd { margin: 4px 0 0; font: 600 14px/1.3 var(--mono); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .titleblock { grid-template-columns: 1fr; }
+  .tb-main { border-right: none; border-bottom: 2px solid var(--ink); }
+}
+
+/* Sheet index */
+.index { display: flex; flex-wrap: wrap; gap: 8px; }
+.index a { font: 600 12px/1 var(--mono); text-decoration: none; padding: 8px 10px; border: 1px solid var(--rule); background: var(--sheet); }
+.index a:hover { border-color: var(--ink); }
+.index a span { color: var(--accent); margin-right: 6px; }
+
+/* Sheets */
+.sheet { background: var(--sheet); border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 18px; padding: 24px 28px 28px; scroll-margin-top: 16px; }
+.sheet-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); padding-bottom: 12px; }
+.sheet-no { font: 600 12px/1 var(--mono); letter-spacing: .1em; color: var(--accent); border: 1px solid var(--accent); padding: 5px 8px; }
+.sheet-head p { color: var(--muted); flex: 1 1 320px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.drawing { overflow-x: auto; border: 1px dashed var(--rule); background: var(--paper); padding: 12px; }
+.drawing svg { display: block; width: 100%; height: auto; min-width: 760px; color: var(--ink); }
+figcaption { color: var(--muted); font-size: .92rem; max-width: 80ch; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; }
+.notes div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.notes h3 { font-size: .95rem; }
+.notes p { color: var(--muted); font-size: .93rem; }
+
+/* SVG drawing vocabulary (styled from the page, so both themes work) */
+svg text { fill: var(--ink); font-family: var(--sans); font-size: 12px; }
+svg .t { font-family: var(--display); font-weight: 600; font-size: 14px; }
+svg .s { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+svg .l { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+svg .lh { fill: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 600; }
+svg .tag { fill: var(--accent); font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .08em; }
+svg .zl { fill: var(--muted); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+svg .box { fill: var(--sheet); stroke: var(--ink); stroke-width: 1.3; }
+svg .box.alt { fill: var(--panel); }
+svg .box.hot { stroke: var(--accent); stroke-width: 2; }
+svg .band { fill: var(--panel); stroke: var(--rule); stroke-width: 1; }
+svg .zone { fill: none; stroke: var(--rule); stroke-width: 1.2; stroke-dasharray: 6 5; }
+svg .w { fill: none; stroke: var(--ink); stroke-width: 1.3; }
+svg .w.d { stroke-dasharray: 5 4; }
+svg .w.h { stroke: var(--accent); stroke-width: 1.8; }
+svg .ah { fill: var(--ink); }
+svg .ahh { fill: var(--accent); }
+svg .hdr { fill: var(--panel); stroke: var(--ink); stroke-width: 1.3; }
+svg .axis { stroke: var(--ink); stroke-width: 1.3; }
+svg .tick { stroke: var(--rule); stroke-width: 1; }
+svg .seg { fill: var(--accent-soft); stroke: none; }
+
+/* Turn order chips */
+.turns { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr); gap: 20px; align-items: center; }
+.lane { display: flex; flex-direction: column; gap: 8px; }
+.lane-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lane-row b { font: 600 12px/1 var(--mono); width: 64px; color: var(--muted); }
+.chip { font: 600 13px/1 var(--mono); padding: 7px 9px; border: 1.3px solid var(--ink); background: var(--sheet); }
+.chip.t2 { background: var(--panel); }
+.chip.t3 { border-style: dashed; }
+.chip.bump { border-color: var(--accent); color: var(--accent); }
+.arrow { font: 600 22px/1 var(--mono); color: var(--accent); }
+.order { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.order .sep { font: 600 12px/1 var(--mono); color: var(--muted); padding: 0 4px; }
+@media (max-width: 760px) { .turns { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: start; } }
+
+/* Tables */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 600 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom: 1.5px solid var(--ink); }
+td code { white-space: nowrap; }
+.yes { font-weight: 600; }
+.no { color: var(--muted); }
+.pill { font: 600 11px/1 var(--mono); padding: 4px 7px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ink); }
+.pill.warn { color: var(--accent); }
+.routes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 28px; }
+.routes div { min-width: 0; }
+.routes ul { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 3px; }
+.routes li { font: 12.5px/1.45 var(--mono); overflow-wrap: anywhere; }
+.routes li span { color: var(--accent); font-weight: 600; display: inline-block; min-width: 52px; }
+.routes h3 small { font: 500 12px var(--mono); color: var(--muted); }
+footer { color: var(--muted); font: 12px/1.5 var(--mono); text-align: center; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+<style>
+/* Print (PDF for the ARES Application Suite): whole drawings, no scroll bars, sheets not split mid-drawing. */
+@media print {
+  body { padding-block: 0; }
+  .wrap { gap: 18px; }
+  .drawing { overflow: visible; }
+  .drawing svg { min-width: 0; }
+  .tablewrap { overflow: visible; }
+  .sheet { break-before: page; }
+  figure, tr, .notes > div, .routes > div { break-inside: avoid; }
+}
+</style>
+
+<div class="wrap">
+
+<header class="titleblock">
+  <div class="tb-main">
+    <span class="eyebrow">Architecture blueprint</span>
+    <h1>ARES Terminal Console</h1>
+    <p>How the terminal is built and run. One small Python server, standard library only, owns the shells and carries their bytes to a window over WebSocket. Sessions belong to the server, not the window, so they survive a closed tab. Seven read-only server tools ride the SSH login already typed into a pane, and nothing reaches Claude or OSV.dev until the operator has seen it and pressed Send.</p>
+  </div>
+  <dl class="tb-cells">
+    <div><dt>Drawing</dt><dd>ATC-ARCH-001</dd></div>
+    <div><dt>Revision</dt><dd>2.3.0</dd></div>
+    <div><dt>Date</dt><dd>16 Nov 2026</dd></div>
+    <div><dt>Sheets</dt><dd>A-01 … A-08</dd></div>
+    <div><dt>Authored by</dt><dd>Alfredo Nacino</dd></div>
+    <div><dt>Distribution</dt><dd>aresrepo.cybercontrol.tech</dd></div>
+    <div><dt>Docker</dt><dd>docker.cybercontrol.tech/ares/terminal-console</dd></div>
+    <div><dt>Stack</dt><dd>Python 3.11 stdlib · xterm.js</dd></div>
+    <div><dt>Hosts</dt><dd>Desktop · Docker · ApexBuild</dd></div>
+  </dl>
+</header>
+
+<nav class="index" aria-label="Sheet index">
+  <a href="#a01"><span>A-01</span>Context</a>
+  <a href="#a02"><span>A-02</span>Components</a>
+  <a href="#a03"><span>A-03</span>Keystroke &amp; output</a>
+  <a href="#a04"><span>A-04</span>Server tools</a>
+  <a href="#a05"><span>A-05</span>Consent</a>
+  <a href="#a06"><span>A-06</span>Access</a>
+  <a href="#a07"><span>A-07</span>Build &amp; release</a>
+  <a href="#a08"><span>A-08</span>Interfaces</a>
+</nav>
+
+<!-- A-01 Context -->
+<section class="sheet" id="a01">
+  <div class="sheet-head"><span class="sheet-no">A-01</span><h2>System context</h2><p>Who uses it, what it runs on, and what it talks to.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 440" role="img" aria-label="The operator uses a window that talks HTTP and WebSocket to the server on 127.0.0.1. The server runs local shells through a pty or ConPTY, reaches remote servers over SSH with a shared login, and sends text to Claude through the operator's Claude Code only on Send, and package lists to OSV.dev only after a preview. Releases come from ARES Repository; ApexBuild can frame the app and sign the user in with a one-time ticket.">
+        <defs><marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m1h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahh"/></marker></defs>
+        <!-- operator and window -->
+        <rect class="box" x="20" y="30" width="180" height="52"/><text class="t" x="34" y="52">Operator</text><text class="s" x="34" y="70">keyboard · reads first</text>
+        <line class="w" x1="110" y1="82" x2="110" y2="148" marker-end="url(#m1)"/>
+        <rect class="box" x="20" y="150" width="180" height="112"/><text class="t" x="34" y="172">Window</text>
+        <text class="s" x="34" y="192">Qt WebEngine (Linux)</text><text class="s" x="34" y="208">WKWebView (macOS)</text><text class="s" x="34" y="224">WebView2 (Windows)</text><text class="s" x="34" y="240">browser (Docker, suite)</text>
+        <line class="w" x1="200" y1="206" x2="398" y2="206" marker-end="url(#m1)"/><text class="l" x="300" y="196" text-anchor="middle">HTTP + WebSocket</text><text class="l" x="300" y="224" text-anchor="middle">token cookie</text>
+        <!-- server -->
+        <rect class="box hot" x="400" y="20" width="220" height="310"/>
+        <text class="t" x="510" y="150" text-anchor="middle" style="font-size:17px">ARES Terminal</text>
+        <text class="t" x="510" y="170" text-anchor="middle" style="font-size:17px">Console server</text>
+        <text class="s" x="510" y="196" text-anchor="middle">127.0.0.1:&lt;port&gt;</text>
+        <text class="s" x="510" y="214" text-anchor="middle">Python stdlib</text>
+        <text class="s" x="510" y="232" text-anchor="middle">PTYs · history · tools · ask</text>
+        <!-- externals -->
+        <rect class="box alt" x="760" y="30" width="180" height="52"/><text class="t" x="774" y="52">Local shells</text><text class="s" x="774" y="70">bash · zsh · fish · pwsh</text>
+        <rect class="box alt" x="760" y="110" width="180" height="52"/><text class="t" x="774" y="132">Remote servers</text><text class="s" x="774" y="150">read-only probes</text>
+        <rect class="box alt" x="760" y="190" width="180" height="52"/><text class="t" x="774" y="212">Claude</text><text class="s" x="774" y="230">via Claude Code CLI</text>
+        <rect class="box alt" x="760" y="270" width="180" height="52"/><text class="t" x="774" y="292">OSV.dev</text><text class="s" x="774" y="310">known CVEs</text>
+        <line class="w" x1="620" y1="56" x2="758" y2="56" marker-end="url(#m1)"/><text class="l" x="690" y="48" text-anchor="middle">pty · ConPTY</text>
+        <line class="w" x1="620" y1="136" x2="758" y2="136" marker-end="url(#m1)"/><text class="l" x="690" y="128" text-anchor="middle">ssh, shared login</text>
+        <line class="w h d" x1="620" y1="216" x2="758" y2="216" marker-end="url(#m1h)"/><text class="lh" x="690" y="208" text-anchor="middle">only on Send</text>
+        <line class="w h d" x1="620" y1="296" x2="758" y2="296" marker-end="url(#m1h)"/><text class="lh" x="690" y="288" text-anchor="middle">after a preview</text>
+        <!-- bottom: distribution and host -->
+        <rect class="box alt" x="20" y="370" width="200" height="52"/><text class="t" x="34" y="392">ARES Repository</text><text class="s" x="34" y="410">signed releases</text>
+        <polyline class="w d" points="220,396 450,396 450,332" marker-end="url(#m1)"/><text class="l" x="335" y="388" text-anchor="middle">install · update</text>
+        <rect class="box alt" x="760" y="370" width="180" height="52"/><text class="t" x="774" y="392">ApexBuild</text><text class="s" x="774" y="410">suite shell (optional)</text>
+        <polyline class="w d" points="760,396 570,396 570,332" marker-end="url(#m1)"/><text class="l" x="665" y="388" text-anchor="middle">frames · SSO ticket</text>
+      </svg>
+    </div>
+    <figcaption>Everything runs on the operator's own machine (or inside the Docker container). The only outbound traffic the app starts itself is SSH to servers the operator connects to, and the two dashed accent paths, each gated by a click.</figcaption>
+  </figure>
+  <div class="notes">
+    <div><h3>No dependencies</h3><p>The server is Python standard library only. <code>claude-agent-sdk</code> is optional and imported lazily; without it, only the ask bar is missing.</p></div>
+    <div><h3>One codebase, three hosts</h3><p>Desktop app, Docker image and ApexBuild module run the same server. The host decides where it listens, where data lives and how the window is shown.</p></div>
+    <div><h3>No API key in the app</h3><p>The assistant runs on the operator's installed Claude Code, signed in with their Claude subscription.</p></div>
+  </div>
+</section>
+
+<!-- A-02 Components -->
+<section class="sheet" id="a02">
+  <div class="sheet-head"><span class="sheet-no">A-02</span><h2>Software components</h2><p>The modules under <code>app/</code>, and which imports which.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 600" role="img" aria-label="desktop.py starts server.py. server.py serves static/ and imports websocket, pty_session, shell_env, where, history, agent, insight/service and sso. pty_session, where and insight/service use remote.py. insight/service uses agent.py and the probe modules.">
+        <defs><marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+        <!-- left -->
+        <rect class="box" x="20" y="40" width="200" height="56"/><text class="t" x="34" y="62">desktop.py</text><text class="s" x="34" y="80">window · --self-test</text>
+        <line class="w" x1="220" y1="68" x2="288" y2="68" marker-end="url(#m2)"/><text class="l" x="254" y="60" text-anchor="middle">starts</text>
+        <rect class="box alt" x="20" y="150" width="200" height="56"/><text class="t" x="34" y="172">static/</text><text class="s" x="34" y="190">UI · xterm.js vendored</text>
+        <line class="w" x1="290" y1="178" x2="222" y2="178" marker-end="url(#m2)"/><text class="l" x="254" y="170" text-anchor="middle">serves</text>
+        <rect class="band" x="20" y="260" width="200" height="120"/>
+        <text class="zl" x="32" y="282">ENTRY POINTS</text>
+        <text class="s" x="32" y="304">run.sh · run.ps1</text><text class="s" x="32" y="322">apexmod (ApexBuild)</text>
+        <text class="s" x="32" y="340">desktop.py (installed)</text><text class="s" x="32" y="358">Docker image</text>
+        <!-- server -->
+        <rect class="box hot" x="290" y="20" width="200" height="560"/>
+        <text class="t" x="390" y="272" text-anchor="middle" style="font-size:17px">server.py</text>
+        <text class="s" x="390" y="296" text-anchor="middle">ThreadingHTTPServer</text>
+        <text class="s" x="390" y="314" text-anchor="middle">routes · JSON API</text>
+        <text class="s" x="390" y="332" text-anchor="middle">/ws upgrade</text>
+        <text class="s" x="390" y="350" text-anchor="middle">access token · CSP</text>
+        <!-- modules -->
+        <rect class="box" x="600" y="24" width="200" height="52"/><text class="t" x="614" y="45">websocket.py</text><text class="s" x="614" y="63">RFC 6455 · 20 s ping</text>
+        <rect class="box" x="600" y="94" width="200" height="52"/><text class="t" x="614" y="115">pty_session.py</text><text class="s" x="614" y="133">PTY · ConPTY · scrollback</text>
+        <rect class="box" x="600" y="164" width="200" height="52"/><text class="t" x="614" y="185">shell_env.py</text><text class="s" x="614" y="203">colours · ls/ssh shims</text>
+        <rect class="box" x="600" y="234" width="200" height="52"/><text class="t" x="614" y="255">where.py</text><text class="s" x="614" y="273">host · IP · directory</text>
+        <rect class="box" x="600" y="304" width="200" height="52"/><text class="t" x="614" y="325">history.py</text><text class="s" x="614" y="343">history · commands · redact</text>
+        <rect class="box" x="600" y="374" width="200" height="52"/><text class="t" x="614" y="395">agent.py</text><text class="s" x="614" y="413">ask bar · cost ledger</text>
+        <rect class="box" x="600" y="444" width="200" height="52"/><text class="t" x="614" y="465">insight/service.py</text><text class="s" x="614" y="483">the seven server tools</text>
+        <rect class="box" x="600" y="514" width="200" height="52"/><text class="t" x="614" y="535">sso.py</text><text class="s" x="614" y="553">ApexBuild sign-on ticket</text>
+        <g>
+          <line class="w" x1="490" y1="50" x2="598" y2="50" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="120" x2="598" y2="120" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="190" x2="598" y2="190" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="260" x2="598" y2="260" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="330" x2="598" y2="330" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="400" x2="598" y2="400" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="470" x2="598" y2="470" marker-end="url(#m2)"/>
+          <line class="w" x1="490" y1="540" x2="598" y2="540" marker-end="url(#m2)"/>
+        </g>
+        <!-- remote and probes -->
+        <rect class="box hot" x="830" y="234" width="120" height="66"/><text class="t" x="842" y="255">remote.py</text><text class="s" x="842" y="273">SSH target</text><text class="s" x="842" y="289">shared login</text>
+        <line class="w" x1="800" y1="120" x2="878" y2="232" marker-end="url(#m2)"/>
+        <line class="w" x1="800" y1="260" x2="828" y2="260" marker-end="url(#m2)"/>
+        <line class="w" x1="800" y1="456" x2="878" y2="302" marker-end="url(#m2)"/>
+        <rect class="box alt" x="830" y="400" width="120" height="166"/><text class="t" x="842" y="421">probes</text>
+        <text class="s" x="842" y="442">health.py</text><text class="s" x="842" y="458">perfcheck.py</text><text class="s" x="842" y="474">metrics.py</text>
+        <text class="s" x="842" y="490">inventory.py</text><text class="s" x="842" y="506">vulnscan.py</text><text class="s" x="842" y="522">serverinsight</text><text class="s" x="842" y="538">.py</text>
+        <line class="w" x1="800" y1="484" x2="828" y2="484" marker-end="url(#m2)"/>
+        <line class="w" x1="700" y1="444" x2="700" y2="428" marker-end="url(#m2)"/>
+      </svg>
+    </div>
+    <figcaption>server.py is the only module that serves the network. <code>remote.py</code> is the one place that knows how to reach the server behind a pane: pty_session.py asks it how to start an <code>ssh</code> pane, where.py and the tools ask it to run a probe. The AI analyses go through agent.py, so they share its ledger and its no-tools rule.</figcaption>
+  </figure>
+  <div class="notes">
+    <div><h3>Threads, not async</h3><p>One thread per HTTP request and a reader/writer pair per attached WebSocket. Each session has its own reader thread.</p></div>
+    <div><h3>Vendored, not imported</h3><p><code>sso.py</code> is copied from ApexBuild so the module still runs on its own. xterm.js is vendored under <code>static/vendor/</code>, with no CDN.</p></div>
+    <div><h3>Same diagnosis</h3><p>The AI prompts in <code>insight/service.py</code> are ARES Ultimate Console's, word for word, so both products reach the same conclusions.</p></div>
+  </div>
+</section>
+
+<!-- A-03 Keystroke and output -->
+<section class="sheet" id="a03">
+  <div class="sheet-head"><span class="sheet-no">A-03</span><h2>A keystroke and its output</h2><p>The PTY belongs to the server. A WebSocket only attaches to it.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 400" role="img" aria-label="Input: the browser pane sends to the WebSocket reader thread, which calls Session.write, which writes to the PTY and the shell. Output: the shell writes to the PTY, the session's reader thread reads it, coalesces it for 12 ms, appends it to a 256 KB scrollback ring and puts it on each attached socket's listener queue; the WebSocket writer sends it to the pane. On reattach the scrollback is replayed.">
+        <defs><marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahh"/></marker></defs>
+        <text class="tag" x="20" y="24">CLIENT → SERVER   in · resize · signal · antiidle · ping</text>
+        <rect class="box" x="20" y="40" width="150" height="52"/><text class="t" x="34" y="62">Browser pane</text><text class="s" x="34" y="80">xterm.js</text>
+        <rect class="box" x="230" y="40" width="170" height="52"/><text class="t" x="244" y="62">WS reader thread</text><text class="s" x="244" y="80">parses {t: …}</text>
+        <rect class="box" x="460" y="40" width="160" height="52"/><text class="t" x="474" y="62">Session.write()</text><text class="s" x="474" y="80">pty_session.py</text>
+        <rect class="box" x="680" y="40" width="110" height="52"/><text class="t" x="694" y="62">PTY</text><text class="s" x="694" y="80">ConPTY on Win</text>
+        <rect class="box alt" x="840" y="40" width="100" height="52"/><text class="t" x="854" y="62">Shell</text><text class="s" x="854" y="80">bash · pwsh</text>
+        <line class="w" x1="170" y1="66" x2="228" y2="66" marker-end="url(#m3)"/>
+        <line class="w" x1="400" y1="66" x2="458" y2="66" marker-end="url(#m3)"/>
+        <line class="w" x1="620" y1="66" x2="678" y2="66" marker-end="url(#m3)"/>
+        <line class="w" x1="790" y1="66" x2="838" y2="66" marker-end="url(#m3)"/>
+        <text class="tag" x="190" y="204">SERVER → CLIENT   out · info · pong</text>
+        <rect class="box" x="20" y="220" width="150" height="52"/><text class="t" x="34" y="242">WS writer</text><text class="s" x="34" y="260">{t: "out", d}</text>
+        <rect class="box" x="230" y="220" width="170" height="52"/><text class="t" x="244" y="242">Listener queue</text><text class="s" x="244" y="260">one per socket</text>
+        <rect class="box hot" x="460" y="220" width="160" height="52"/><text class="t" x="474" y="242">Coalesce 12 ms</text><text class="s" x="474" y="260">one frame, not many</text>
+        <rect class="box" x="680" y="220" width="110" height="52"/><text class="t" x="694" y="242">Reader</text><text class="s" x="694" y="260">64 KB reads</text>
+        <polyline class="w" points="890,92 890,246 792,246" marker-end="url(#m3)"/>
+        <line class="w" x1="680" y1="246" x2="622" y2="246" marker-end="url(#m3)"/>
+        <line class="w" x1="460" y1="246" x2="402" y2="246" marker-end="url(#m3)"/>
+        <line class="w" x1="230" y1="246" x2="172" y2="246" marker-end="url(#m3)"/>
+        <line class="w" x1="95" y1="220" x2="95" y2="94" marker-end="url(#m3)"/>
+        <rect class="box hot" x="460" y="320" width="160" height="52"/><text class="t" x="474" y="342">Scrollback ring</text><text class="s" x="474" y="360">last 256 KB</text>
+        <line class="w" x1="540" y1="272" x2="540" y2="318" marker-end="url(#m3)"/>
+        <polyline class="w h d" points="458,346 120,346 120,274" marker-end="url(#m3h)"/>
+        <text class="lh" x="290" y="338" text-anchor="middle">replayed when a socket attaches</text>
+      </svg>
+    </div>
+    <figcaption>Closing the tab, losing wifi or suspending the laptop removes a listener; the shell, the PTY and the reader keep running. Reopening attaches a new listener and replays the scrollback first.</figcaption>
+  </figure>
+  <div class="notes">
+    <div><h3>Keep-alive</h3><p>The server pings every idle socket every 20 s, so a proxy or power manager does not decide the connection is dead. Frames over 4 MB are refused.</p></div>
+    <div><h3>Anti-idle</h3><p>Off by default. When set, a NUL byte is written to a session quiet for the chosen interval, so the far end sees traffic. Shells discard it.</p></div>
+    <div><h3>Broadcast</h3><p>Done in the UI: the same input is sent to every pane of the tab on screen. The server sees ordinary input.</p></div>
+  </div>
+</section>
+
+<!-- A-04 Server tools -->
+<section class="sheet" id="a04">
+  <div class="sheet-head"><span class="sheet-no">A-04</span><h2>Server tools over the pane's own login</h2><p>OpenSSH connection sharing. Nothing installed on the server, nothing changed.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 400" role="img" aria-label="A pane started with ssh is given ControlMaster, ControlPath and ControlPersist options, so the login typed in the pane becomes a master connection with a socket. A server tool runs each read-only probe as one more channel over that socket with sh -s. Without a master it connects on its own with BatchMode. The server's identity, machine-id or host key fingerprint, keys its history in servers.json.">
+        <defs><marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m4h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahh"/></marker></defs>
+        <rect class="box" x="20" y="30" width="240" height="100"/><text class="t" x="34" y="52">Pane: ssh admin@db1</text>
+        <text class="s" x="34" y="74">-o ControlMaster=auto</text><text class="s" x="34" y="92">-o ControlPath=~/.ssh/ares-tc/%C</text><text class="s" x="34" y="110">-o ControlPersist=60</text>
+        <rect class="box hot" x="340" y="30" width="240" height="100"/><text class="t" x="354" y="52">Master connection</text>
+        <text class="s" x="354" y="74">login typed once, in the pane</text><text class="s" x="354" y="92">password · one-time code · key</text><text class="s" x="354" y="110">socket ~/.ssh/ares-tc/%C</text>
+        <rect class="box alt" x="700" y="30" width="240" height="100"/><text class="t" x="714" y="52">Remote server</text>
+        <text class="s" x="714" y="74">sh -s  ← read-only probe</text><text class="s" x="714" y="92">nothing installed</text><text class="s" x="714" y="110">nothing changed</text>
+        <line class="w h" x1="260" y1="80" x2="338" y2="80" marker-end="url(#m4h)"/><text class="lh" x="299" y="72" text-anchor="middle">login</text>
+        <line class="w h" x1="580" y1="80" x2="698" y2="80" marker-end="url(#m4h)"/><text class="lh" x="639" y="72" text-anchor="middle">channels</text>
+        <rect class="box" x="340" y="200" width="240" height="70"/><text class="t" x="354" y="222">◈ server tool</text><text class="s" x="354" y="242">insight/service.py</text><text class="s" x="354" y="258">remote: ssh -S &lt;socket&gt;</text>
+        <line class="w h" x1="460" y1="200" x2="460" y2="132" marker-end="url(#m4h)"/><text class="lh" x="470" y="170">one more channel, no prompt</text>
+        <rect class="box alt" x="20" y="200" width="240" height="70"/><text class="t" x="34" y="222">No master?</text><text class="s" x="34" y="242">own connection, BatchMode=yes</text><text class="s" x="34" y="258">keys or agent; fails cleanly</text>
+        <line class="w d" x1="340" y1="235" x2="262" y2="235" marker-end="url(#m4)"/>
+        <rect class="box" x="340" y="320" width="240" height="60"/><text class="t" x="354" y="342">Machine identity</text><text class="s" x="354" y="360">/etc/machine-id or host key</text>
+        <line class="w" x1="460" y1="270" x2="460" y2="318" marker-end="url(#m4)"/>
+        <rect class="box" x="700" y="320" width="240" height="60"/><text class="t" x="714" y="342">servers.json</text><text class="s" x="714" y="360">one history per machine</text>
+        <line class="w" x1="580" y1="350" x2="698" y2="350" marker-end="url(#m4)"/><text class="l" x="639" y="342" text-anchor="middle">keys</text>
+      </svg>
+    </div>
+    <figcaption>The accent path is the point: the operator authenticates once, in the pane, and every tool reuses that login. A tool never prompts, because it has no terminal to prompt in.</figcaption>
+  </figure>
+  <div class="notes">
+    <div><h3>Left alone</h3><p>A command that already sets ControlMaster, ControlPath or <code>-S</code> keeps its own choice. <code>%C</code> hashes host, port and user, so two servers never share a master.</p></div>
+    <div><h3>Typed ssh</h3><p>Local panes get an <code>ssh</code> wrapper on PATH that adds the same sharing for interactive logins only. Git, rsync and scripts get plain ssh.</p></div>
+    <div><h3>Windows</h3><p>Windows' OpenSSH cannot multiplex, so nothing is added there and the tools need a key or an agent.</p></div>
+    <div><h3>Local panes</h3><p>◈ system runs the same scripts in the local shell. Its Stop refuses the app's own process.</p></div>
+  </div>
+</section>
+
+<!-- A-05 Consent -->
+<section class="sheet" id="a05">
+  <div class="sheet-head"><span class="sheet-no">A-05</span><h2>Consent before anything leaves</h2><p>The AI analyses and the vulnerability lookup.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 390" role="img" aria-label="A log or performance report is turned into a preview with secrets replaced and no address or identity. The operator reads it and presses Send to Claude, which returns the same text. The server sends it only if it equals the preview; otherwise nothing is sent. For vulnerabilities, the package list is shown first and the OSV.dev lookup is a separate click.">
+        <defs><marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m5h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahh"/></marker></defs>
+        <text class="tag" x="20" y="22">AI LOG AND PERFORMANCE ANALYSIS</text>
+        <rect class="box" x="20" y="40" width="180" height="64"/><text class="t" x="34" y="62">Report</text><text class="s" x="34" y="80">logs or perf check</text>
+        <rect class="box" x="260" y="40" width="200" height="64"/><text class="t" x="274" y="62">…/ai/preview</text><text class="s" x="274" y="80">secrets → ***</text><text class="s" x="274" y="95">no address, no identity</text>
+        <rect class="box hot" x="520" y="40" width="200" height="64"/><text class="t" x="534" y="62">Operator reads it</text><text class="s" x="534" y="80">presses Send to Claude</text>
+        <rect class="box" x="780" y="40" width="160" height="64"/><text class="t" x="794" y="62">Same text?</text><text class="s" x="794" y="80">payload == preview</text>
+        <line class="w" x1="200" y1="72" x2="258" y2="72" marker-end="url(#m5)"/>
+        <line class="w" x1="460" y1="72" x2="518" y2="72" marker-end="url(#m5)"/>
+        <line class="w h" x1="720" y1="72" x2="778" y2="72" marker-end="url(#m5h)"/>
+        <rect class="box alt" x="780" y="170" width="160" height="64"/><text class="t" x="794" y="192">Claude</text><text class="s" x="794" y="210">your Claude Code</text>
+        <line class="w h" x1="880" y1="104" x2="880" y2="168" marker-end="url(#m5h)"/><text class="lh" x="890" y="142">yes</text>
+        <rect class="box alt" x="520" y="170" width="200" height="64"/><text class="t" x="534" y="192">Refused</text><text class="s" x="534" y="210">nothing is sent</text>
+        <polyline class="w d" points="810,104 810,140 620,140 620,168" marker-end="url(#m5)"/><text class="l" x="715" y="132" text-anchor="middle">no</text>
+        <rect class="band" x="20" y="170" width="440" height="64"/><text class="s" x="34" y="194">agent: tools = [], allowed_tools = []</text><text class="s" x="34" y="211">permission_mode = "dontAsk"</text><text class="s" x="34" y="228">answer saved to the server's history</text>
+        <text class="tag" x="20" y="292">VULNERABILITY LOOKUP</text>
+        <rect class="box" x="20" y="310" width="180" height="64"/><text class="t" x="34" y="332">Package list</text><text class="s" x="34" y="350">from the scan</text>
+        <rect class="box" x="260" y="310" width="200" height="64"/><text class="t" x="274" y="332">Shown first</text><text class="s" x="274" y="350">exactly what is sent</text>
+        <rect class="box hot" x="520" y="310" width="200" height="64"/><text class="t" x="534" y="332">Operator clicks</text><text class="s" x="534" y="350">…/vulns/lookup</text>
+        <rect class="box alt" x="780" y="310" width="160" height="64"/><text class="t" x="794" y="332">OSV.dev</text><text class="s" x="794" y="350">known CVEs</text>
+        <line class="w" x1="200" y1="342" x2="258" y2="342" marker-end="url(#m5)"/>
+        <line class="w" x1="460" y1="342" x2="518" y2="342" marker-end="url(#m5)"/>
+        <line class="w h" x1="720" y1="342" x2="778" y2="342" marker-end="url(#m5h)"/>
+      </svg>
+    </div>
+    <figcaption>A request can only send text the operator was shown: the server compares the payload with the preview it would build now, and refuses anything else.</figcaption>
+  </figure>
+  <div class="notes">
+    <div><h3>The ask bar</h3><p>The agent has no tools and no permission to use any. INSERT puts the command at the prompt without a newline; the operator presses Enter. Broadcast is ignored.</p></div>
+    <div><h3>Subscription</h3><p>Asks go through the operator's Claude Code login. An <code>ANTHROPIC_API_KEY</code> is hidden from the assistant unless <code>ARES_ASK_AUTH=api-key</code>.</p></div>
+    <div><h3>Cost ledger</h3><p>Questions, tokens, model and cost are kept in <code>agent-costs.json</code>. Answers are not stored there.</p></div>
+  </div>
+</section>
+
+<!-- A-06 Access -->
+<section class="sheet" id="a06">
+  <div class="sheet-head"><span class="sheet-no">A-06</span><h2>Access and trust boundaries</h2><p>Who can reach the port decides whether a token is required.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 420" role="img" aria-label="Three zones. On loopback from source or ApexBuild there is no login of its own, and ApexBuild signs the user in with a one-time ticket. The desktop app always uses a token. Any listener beyond loopback, such as Docker, requires a token and should sit behind TLS. The token travels once in the link, is swapped for an HttpOnly SameSite=Strict cookie, and the address bar is cleaned with a redirect.">
+        <defs><marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m6h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahh"/></marker></defs>
+        <rect class="zone" x="20" y="20" width="290" height="270"/><text class="zl" x="32" y="40">LOOPBACK · SOURCE, APEXBUILD</text>
+        <rect class="box" x="40" y="60" width="250" height="60"/><text class="t" x="54" y="82">No login of its own</text><text class="s" x="54" y="100">same trust as the suite</text>
+        <rect class="box" x="40" y="150" width="250" height="60"/><text class="t" x="54" y="172">ApexBuild sign-on</text><text class="s" x="54" y="190">one-time ticket, sso.py</text>
+        <text class="s" x="40" y="260">frame-ancestors 'self' + host</text>
+        <rect class="zone" x="335" y="20" width="290" height="270"/><text class="zl" x="347" y="40">DESKTOP APP</text>
+        <rect class="box hot" x="355" y="60" width="250" height="60"/><text class="t" x="369" y="82">Token, always</text><text class="s" x="369" y="100">127.0.0.1, free port</text>
+        <rect class="box" x="355" y="150" width="250" height="60"/><text class="t" x="369" y="172">Other local users</text><text class="s" x="369" y="190">cannot open a shell</text>
+        <text class="s" x="355" y="260">frame-ancestors 'self'</text>
+        <rect class="zone" x="650" y="20" width="290" height="270"/><text class="zl" x="662" y="40">BEYOND LOOPBACK</text>
+        <rect class="box hot" x="670" y="60" width="250" height="60"/><text class="t" x="684" y="82">Token required</text><text class="s" x="684" y="100">Docker · --host 0.0.0.0</text>
+        <rect class="box" x="670" y="150" width="250" height="60"/><text class="t" x="684" y="172">TLS in front</text><text class="s" x="684" y="190">https:// origins accepted</text>
+        <text class="s" x="670" y="260">token: a shared secret</text>
+        <text class="tag" x="20" y="326">TOKEN EXCHANGE · /api/health IS THE ONLY OPEN PATH</text>
+        <rect class="box" x="20" y="340" width="250" height="56"/><text class="t" x="34" y="362">Link with ?token=…</text><text class="s" x="34" y="380">travels once</text>
+        <rect class="box hot" x="350" y="340" width="260" height="56"/><text class="t" x="364" y="362">Cookie</text><text class="s" x="364" y="380">HttpOnly · SameSite=Strict</text>
+        <rect class="box" x="690" y="340" width="250" height="56"/><text class="t" x="704" y="362">Redirect</text><text class="s" x="704" y="380">token out of the address bar</text>
+        <line class="w h" x1="270" y1="368" x2="348" y2="368" marker-end="url(#m6h)"/><text class="lh" x="309" y="360" text-anchor="middle">swap</text>
+        <line class="w" x1="610" y1="368" x2="688" y2="368" marker-end="url(#m6)"/>
+      </svg>
+    </div>
+    <figcaption>The WebSocket handshake checks <code>Origin</code> in every zone, because browsers do not apply CORS to WebSockets; without it any web page could open a shell on localhost.</figcaption>
+  </figure>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Threat</th><th>Control</th></tr></thead>
+      <tbody>
+        <tr><td>Another local user opens a shell through the port</td><td>The desktop app always uses an access token</td></tr>
+        <tr><td>Someone on the network reaches the port</td><td>Any listener beyond loopback requires a token (the Docker image turns it on)</td></tr>
+        <tr><td>A web page opens a WebSocket to localhost</td><td><code>Origin</code> is checked on the handshake</td></tr>
+        <tr><td>Token leaks through the address bar or history</td><td><code>?token=</code> is exchanged once for an HttpOnly, SameSite=Strict cookie and redirected away</td></tr>
+        <tr><td>Clickjacking</td><td>CSP <code>frame-ancestors 'self'</code>; plus exactly one loopback origin under ApexBuild</td></tr>
+        <tr><td>Injected script in the UI</td><td>CSP <code>script-src 'self'</code>, <code>object-src 'none'</code>, <code>base-uri 'none'</code>, <code>form-action 'none'</code>; xterm.js vendored</td></tr>
+        <tr><td>AI runs a command</td><td>The agent has no tools and no permissions; INSERT never sends a newline</td></tr>
+        <tr><td>Secrets sent to Claude or OSV.dev</td><td>Preview first, secrets replaced with <code>***</code>, no address or identity, sent only on the operator's click</td></tr>
+        <tr><td>Secrets on disk</td><td>Command lines redacted; unechoed input never recorded</td></tr>
+        <tr><td>Tampered download</td><td>Releases signed and verified against ARES Repository's manifest</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- A-07 Build and release -->
+<section class="sheet" id="a07">
+  <div class="sheet-head"><span class="sheet-no">A-07</span><h2>Build and release</h2><p>PyInstaller does not cross-compile, so each platform builds on its own kind of machine.</p></div>
+  <figure>
+    <div class="drawing">
+      <svg viewBox="0 0 960 470" role="img" aria-label="The version in apexmodule.toml and the CHANGELOG feed build-linux.sh, build-arch.sh and build-remote.sh. Every desktop build must pass --self-test. release.sh signs and publishes to ARES Repository. docker-push.sh pushes the image to the Docker registry. register-ares-suite.sh updates the ARES Application Suite entry and documents.">
+        <defs><marker id="m7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m7h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahh"/></marker></defs>
+        <rect class="box" x="20" y="170" width="180" height="70"/><text class="t" x="34" y="192">Source</text><text class="s" x="34" y="212">apexmodule.toml</text><text class="s" x="34" y="228">CHANGELOG.md</text>
+        <rect class="box" x="260" y="20" width="230" height="60"/><text class="t" x="274" y="42">build-linux.sh</text><text class="s" x="274" y="62">.deb · .tar.gz (Debian 11)</text>
+        <rect class="box" x="260" y="100" width="230" height="60"/><text class="t" x="274" y="122">build-arch.sh</text><text class="s" x="274" y="142">.pkg.tar.zst</text>
+        <rect class="box" x="260" y="180" width="230" height="60"/><text class="t" x="274" y="202">build-remote.sh</text><text class="s" x="274" y="222">.exe/.zip · .dmg/.zip</text>
+        <rect class="box" x="260" y="300" width="230" height="60"/><text class="t" x="274" y="322">docker-push.sh</text><text class="s" x="274" y="342">build · check · push</text>
+        <rect class="box" x="260" y="390" width="230" height="60"/><text class="t" x="274" y="412">register-ares-suite.sh</text><text class="s" x="274" y="432">entry + documents</text>
+        <line class="w" x1="200" y1="190" x2="258" y2="50" marker-end="url(#m7)"/>
+        <line class="w" x1="200" y1="198" x2="258" y2="130" marker-end="url(#m7)"/>
+        <line class="w" x1="200" y1="210" x2="258" y2="210" marker-end="url(#m7)"/>
+        <line class="w" x1="200" y1="222" x2="258" y2="330" marker-end="url(#m7)"/>
+        <line class="w" x1="200" y1="232" x2="258" y2="420" marker-end="url(#m7)"/>
+        <rect class="box hot" x="550" y="60" width="140" height="140"/><text class="t" x="620" y="114" text-anchor="middle">--self-test</text><text class="s" x="620" y="136" text-anchor="middle">every build</text><text class="s" x="620" y="152" text-anchor="middle">a shell must run</text>
+        <line class="w h" x1="490" y1="50" x2="548" y2="90" marker-end="url(#m7h)"/>
+        <line class="w h" x1="490" y1="130" x2="548" y2="130" marker-end="url(#m7h)"/>
+        <line class="w h" x1="490" y1="210" x2="548" y2="172" marker-end="url(#m7h)"/>
+        <rect class="box" x="740" y="60" width="200" height="60"/><text class="t" x="754" y="82">release.sh</text><text class="s" x="754" y="102">sign · publish</text>
+        <line class="w h" x1="690" y1="90" x2="738" y2="90" marker-end="url(#m7h)"/>
+        <rect class="box alt" x="740" y="170" width="200" height="60"/><text class="t" x="754" y="192">ARES Repository</text><text class="s" x="754" y="212">aresrepo.cybercontrol.tech</text>
+        <line class="w h" x1="840" y1="120" x2="840" y2="168" marker-end="url(#m7h)"/>
+        <rect class="box alt" x="740" y="300" width="200" height="60"/><text class="t" x="754" y="322">Docker registry</text><text class="s" x="754" y="342">docker.cybercontrol.tech</text>
+        <line class="w" x1="490" y1="330" x2="738" y2="330" marker-end="url(#m7)"/><text class="l" x="614" y="322" text-anchor="middle">ares/terminal-console</text>
+        <rect class="box alt" x="740" y="390" width="200" height="60"/><text class="t" x="754" y="412">ARES Application Suite</text><text class="s" x="754" y="432">ares-suite.nacino.net</text>
+        <line class="w" x1="490" y1="420" x2="738" y2="420" marker-end="url(#m7)"/><text class="l" x="614" y="412" text-anchor="middle">integration token</text>
+      </svg>
+    </div>
+    <figcaption>Releases are published only to ARES Repository, signed. They are not attached to GitHub or GitLab releases: the signed manifest is what proves a download is genuine. Tokens and the signing key live in <code>~/.config/</code>, never in the repository.</figcaption>
+  </figure>
+  <div class="notes">
+    <div><h3>Linux data</h3><p><code>~/.local/share/ares-terminal-console</code></p></div>
+    <div><h3>macOS data</h3><p><code>~/Library/Application Support/ARES Terminal Console</code></p></div>
+    <div><h3>Windows data</h3><p><code>%APPDATA%\ARES Terminal Console</code></p></div>
+    <div><h3>Docker data</h3><p><code>/data</code>; shells run as the unprivileged user <code>ares</code>.</p></div>
+  </div>
+</section>
+
+<!-- A-08 Interfaces -->
+<section class="sheet" id="a08">
+  <div class="sheet-head"><span class="sheet-no">A-08</span><h2>Interfaces</h2><p>Every HTTP route, and the files the server keeps. Where a token is in use, every route needs it except <code>/api/health</code>.</p></div>
+  <div class="routes">
+    <div><h3>Sessions</h3><ul>
+      <li><span>GET</span>/api/sessions</li><li><span>POST</span>/api/sessions  {command, cwd, cols, rows}</li>
+      <li><span>POST</span>/api/sessions/&lt;id&gt;/kill</li><li><span>GET</span>/api/sessions/&lt;id&gt;/where</li>
+      <li><span>WS</span>/ws?session=&lt;id&gt;</li></ul></div>
+    <div><h3>History &amp; commands</h3><ul>
+      <li><span>GET</span>/api/history</li><li><span>POST</span>/api/history/save · forget · clear</li>
+      <li><span>POST</span>/api/sessions/&lt;id&gt;/command  {command, how}</li>
+      <li><span>GET</span>/api/commands  ?session=&amp;connection=&amp;q=</li><li><span>POST</span>/api/commands/clear</li></ul></div>
+    <div><h3>Servers &amp; tools</h3><ul>
+      <li><span>GET</span>/api/connections · <span>POST</span>/forget</li>
+      <li><span>GET</span>/api/servers · /api/servers/&lt;id&gt;</li><li><span>POST</span>/api/servers/&lt;id&gt;/forget</li>
+      <li><span>*</span>/api/insight/&lt;session&gt;/identity · health · perf</li>
+      <li><span>*</span>/api/insight/&lt;session&gt;/logs · packages · vulns · history</li>
+      <li><span>POST</span>…/perf|logs/ai/preview · …/ai · …/vulns/lookup</li></ul></div>
+    <div><h3>Assistant</h3><ul>
+      <li><span>GET</span>/api/agent/state</li><li><span>POST</span>/api/agent/ask</li>
+      <li><span>GET</span>/api/agent/costs</li><li><span>POST</span>/api/agent/costs/clear</li></ul></div>
+    <div><h3>Other</h3><ul>
+      <li><span>GET</span>/api/health  (no token)</li><li><span>GET</span>/api/colors  (ls legend)</li>
+      <li><span>GET</span>/  the UI (static/)</li>
+      <li>apexmod info · check · run --host --port</li></ul></div>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>File (data folder)</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td><code>history.json</code></td><td>Connections opened (start, end, exit code), saved entries, commands sent, SSH destinations and their sessions. Command lines redacted.</td></tr>
+        <tr><td><code>servers.json</code></td><td>Per-server reports and analyses, keyed by machine identity</td></tr>
+        <tr><td><code>agent-costs.json</code></td><td>The assistant's cost ledger: question, tokens, model, cost</td></tr>
+        <tr><td><code>access-token</code></td><td>The Docker image's persistent token, when <code>ARES_ACCESS_TOKEN</code> is not set</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>ARES Terminal Console · Architecture blueprint ATC-ARCH-001 · revision 2.3.0 · 16 November 2026</footer>
+</div>

@@ -1,4 +1,4 @@
-<img src="packaging/icons/ares-256.png" alt="" width="72">
+<p align="center"><img src="app/static/brand/ares-terminal-logo-light.svg" alt="ARES Terminal Console" width="420"></p>
 
 # ARES Terminal Console
 
@@ -9,6 +9,12 @@ ApexBuild suite.
 
 *Formerly Apex Terminal. 2.0.0 is the rename, plus the desktop and Docker
 builds; a 1.x history folder is moved across on first start.*
+
+📊 **[Executive Summary](docs/EXECUTIVE-SUMMARY.md)** · 🎤 **[Executive Presentation](docs/EXECUTIVE-PRESENTATION.md)** ([slides](docs/executive-presentation.html), PowerPoint built by `packaging/build-docs.sh`) ·
+🏗️ **[Architecture](docs/ARCHITECTURE.md)** and its drawn **[blueprint](docs/blueprint.html)** · 📖 **[Complete Description](docs/DESCRIPTION.md)**
+
+Listed on the **ARES Application Suite** (<https://ares-suite.nacino.net>) with
+these four documents, as PDFs and a PowerPoint; `packaging/register-ares-suite.sh` keeps the entry current.
 
 ## Install
 
@@ -344,7 +350,8 @@ ares-terminal-console/
 ├── apexmod              launcher (info / check / run)
 ├── run.sh, run.ps1      standalone entry points
 ├── Dockerfile           the browser-served image
-├── packaging/           desktop builds, installers, icons, release scripts
+├── packaging/           desktop builds, installers, icons, document and release scripts
+├── docs/                executive summary, presentation, architecture + blueprint, description
 └── app/
     ├── server.py        HTTP, WebSocket upgrade, JSON API, the access token
     ├── desktop.py       the desktop window, one server per user, --self-test
@@ -371,11 +378,17 @@ packaging/build-remote.sh          # Windows .exe/.zip and macOS .dmg/.zip, on t
 packaging/release.sh --dry-run     # what would be published
 packaging/release.sh               # sign and publish to ARES Repository
 packaging/docker/docker-push.sh    # build, check and push the Docker image
+packaging/build-docs.sh            # the documents: PDFs and the PowerPoint, in dist/docs/
+packaging/register-ares-suite.sh   # update the ARES Application Suite entry and documents
 ```
 
 `release.sh` reads its token and signing key from
 `~/.config/ares-repository/ares-terminal-console.env`; neither is ever in this
 repository.
+
+`register-ares-suite.sh` needs an integration token from the suite's
+**Admin → Integrations** tab, in `ARES_SUITE_TOKEN` or
+`~/.config/ares-suite/token`; `--dry-run` shows what it would send.
 
 ## License
 
