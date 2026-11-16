@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.3.1]
 - The server tools are a card floating in the top-right corner of the focused pane's terminal, as on TractorBeam's SSH tab: the machine's name and OS, and the seven tools one click away, instead of the ◈ button in the pane's title bar. ▸ folds it to a single ◈ server / ◈ system button, for every pane, remembered between runs.
 
 ## [2.3.0]
