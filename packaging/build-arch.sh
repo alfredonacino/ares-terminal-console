@@ -1,13 +1,14 @@
 #!/bin/sh
 # Build the Arch Linux package (pacman .pkg.tar.zst) from the Linux tarball that
 # packaging/build-linux.sh produced. Needs makepkg (Arch, Manjaro, EndeavourOS, CachyOS...).
-#   packaging/build-arch.sh         ->  dist/ares-terminal-console-<version>-1-x86_64.pkg.tar.zst
-# Install it with: sudo pacman -U dist/ares-terminal-console-<version>-1-x86_64.pkg.tar.zst
+#   packaging/build-arch.sh         ->  dist/desktop/ares-terminal-console-<version>-linux-x86_64.pkg.tar.zst
+# Install it with: sudo pacman -U dist/desktop/ares-terminal-console-<version>-linux-x86_64.pkg.tar.zst
+# (scripts/build-desktop.sh builds the same package anywhere with nfpm; this is the makepkg way.)
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 APP=ares-terminal-console
-VERSION=$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "$ROOT/apexmodule.toml")
-TARBALL="$ROOT/dist/$APP-$VERSION-linux-x86_64.tar.gz"
+VERSION=$(cat "$ROOT/VERSION")
+TARBALL="$ROOT/dist/desktop/$APP-$VERSION-linux-x86_64.tar.gz"
 [ -f "$TARBALL" ] || { echo "$TARBALL is missing: run packaging/build-linux.sh first" >&2; exit 1; }
 command -v makepkg >/dev/null || { echo "makepkg not found: run this on Arch Linux" >&2; exit 1; }
 
@@ -22,10 +23,10 @@ ln -s "$TARBALL" "$WORK/"
 (cd "$WORK" && PKGDEST="$WORK/out" PKGEXT=.pkg.tar.zst makepkg --force --cleanbuild --nodeps --noconfirm >&2 \
    && makepkg --printsrcinfo > .SRCINFO)
 PKG=$(ls "$WORK"/out/*.pkg.tar.zst)
-cp "$PKG" "$ROOT/dist/"
-cp "$WORK/PKGBUILD" "$ROOT/dist/PKGBUILD"
-cp "$WORK/.SRCINFO" "$ROOT/dist/.SRCINFO"
-NAME=$(basename "$PKG")
-cd "$ROOT/dist"
+NAME="$APP-$VERSION-linux-x86_64.pkg.tar.zst"     # ARES Suite file name
+cp "$PKG" "$ROOT/dist/desktop/$NAME"
+cp "$WORK/PKGBUILD" "$ROOT/dist/desktop/PKGBUILD"
+cp "$WORK/.SRCINFO" "$ROOT/dist/desktop/.SRCINFO"
+cd "$ROOT/dist/desktop"
 { grep -v "  $NAME\$" SHA256SUMS 2>/dev/null || true; sha256sum "$NAME"; } | sort -k2 > SHA256SUMS.new && mv SHA256SUMS.new SHA256SUMS
-echo "dist/$NAME"
+echo "dist/desktop/$NAME"

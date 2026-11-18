@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.4.0]
+- **Web application.** `app/main.py` serves ARES Terminal Console as a web app (Docker, the `pre` pm2 app server, the `prod` Kubernetes pod), with sign-in in front of everything but `/healthz`. The desktop app, `./run.sh` and ApexBuild stay as they were: **no sign-in**.
+- **User administration**: users with roles (administrator, user), created by an administrator or on first SSO sign-in; disable, reset password, reset 2FA, sign out everywhere, delete. The first administrator is **`aresadmin`**, with a one-time password in `DATA_DIR/initial-admin-password.txt` (or `ARES_ADMIN_PASSWORD`) that must be changed at first sign-in.
+- **Two-factor authentication** (TOTP, any authenticator app) with ten single-use recovery codes; required for every local and LDAP account by default (policy: everyone, administrators, optional; optionally SSO accounts too).
+- **Single sign-on**: Microsoft Entra ID through OpenID Connect (PKCE, ID token verified against the tenant's keys, groups and app roles to roles), any SAML 2.0 identity provider (metadata import, signed assertions), and LDAP / Active Directory (LDAPS or StartTLS, service bind, group-based admin and access).
+- **Per-user isolation**: each user's terminals, scrollback, command and connection history, server tools data and SSH home are their own. Local shells on the server are for administrators only by default; other users open `ssh` connections, with options that would run or read local things refused.
+- **Policies**: session idle and maximum length, lockout, password sign-in for everyone or administrators only, 2FA, local shells, retention.
+- **Backup & Restore** (ARES Suite standard `suite-backup/1`): local, SFTP and S3-compatible destinations, AES-256-GCM with a scrypt passphrase that is never in a backup, schedule and retention per destination, restore from the page, the first-run screen or `python app/main.py backup create|list|restore|prune`. Also in the desktop app.
+- **API tokens** (`ares_<id>_<secret>`, scopes, expiry, rotate, revoke) for every function under `/api/v1/`, with `GET /api/v1/openapi.json`.
+- **Audit & Activity** log in the database (sign-ins, 2FA, users, tokens, settings, backups, terminals opened and closed, commands run), filters and CSV / JSON export, retention.
+- **JSON logs** (ECS) on stdout and forwarding to syslog (UDP/TCP/TLS) and HTTPS collectors (Splunk, Elastic, Graylog, Loki, Wazuh, Sentinel), at least once for audit and activity.
+- **Deployed in `prod` and `pre`** with the ARES Suite standard: `ares.app.json`, server and nginx images `docker.cybercontrol.tech/ares/ares-terminal-console[-web]`, Kubernetes manifests, pm2 with watch, CI on GitLab and GitHub.
+- Desktop installers for every platform: Linux `.deb`, `.rpm`, `.pkg.tar.zst`, `.AppImage`, `.tar.gz`; Windows `-setup.exe`, `.msi`, `.zip`; macOS `.dmg` and `.zip` for Apple silicon and Intel; all named `ares-terminal-console-<version>-<os>-<arch>.<ext>`.
+- The version lives in `VERSION` (mirrored in `apexmodule.toml` for ApexBuild).
+- The Docker image is now `docker.cybercontrol.tech/ares/ares-terminal-console` on port 3222 with data in `/app/data`, and requires a sign-in instead of the access-token link.
+
 ## [2.3.1]
 - The server tools are a card floating in the top-right corner of the focused pane's terminal, as on TractorBeam's SSH tab: the machine's name and OS, and the seven tools one click away, instead of the ◈ button in the pane's title bar. ▸ folds it to a single ◈ server / ◈ system button, for every pane, remembered between runs.
 

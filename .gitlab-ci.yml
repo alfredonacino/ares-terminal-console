@@ -1,0 +1,45 @@
+# ARES Suite standard pipeline for ares-terminal-console (gitlab.nacino.net).
+# Group-level CI/CD variables (masked, protected) - never commit their values:
+#   SUITE_REGISTRY        Docker registry host
+#   SUITE_DOCKER_USER     registry user, "<user>+<label>" for a token
+#   SUITE_DOCKER_TOKEN    registry token
+# Deploys are not run from CI: `suite deploy pre|prod` runs from the release machine,
+# which holds the kube contexts and SSH access.
+stages: [test, image]
+
+variables:
+  KEY: ares-terminal-console
+  SUITE: ares
+
+test:
+  stage: test
+  image: python:3.13-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends openssh-client >/dev/null
+    # The local mode must still start on the bare standard library: import it before any pip install.
+    - python -c "import app.server"
+    - python -m venv .venv && . .venv/bin/activate
+    - pip install -q -r requirements.txt
+    - python -m unittest discover -s tests -v
+
+image:
+  stage: image
+  image: docker:27
+  services: [docker:27-dind]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/'
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - echo "$SUITE_DOCKER_TOKEN" | docker login "$SUITE_REGISTRY" -u "$SUITE_DOCKER_USER" --password-stdin
+    - |
+      LABELS="--label org.opencontainers.image.version=$VERSION --label org.opencontainers.image.revision=$CI_COMMIT_SHA --label tech.cybercontrol.suite=$SUITE --label tech.cybercontrol.app=$KEY"
+      if [ -f Dockerfile ]; then
+        docker build $LABELS --build-arg APP_VERSION=$VERSION -t "$SUITE_REGISTRY/$SUITE/$KEY:$VERSION" -t "$SUITE_REGISTRY/$SUITE/$KEY:latest" .
+        docker push "$SUITE_REGISTRY/$SUITE/$KEY:$VERSION"; docker push "$SUITE_REGISTRY/$SUITE/$KEY:latest"
+      fi
+      docker build $LABELS --build-arg APP_VERSION=$VERSION -f docker/Dockerfile.web -t "$SUITE_REGISTRY/$SUITE/$KEY-web:$VERSION" -t "$SUITE_REGISTRY/$SUITE/$KEY-web:latest" .
+      docker push "$SUITE_REGISTRY/$SUITE/$KEY-web:$VERSION"; docker push "$SUITE_REGISTRY/$SUITE/$KEY-web:latest"

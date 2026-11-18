@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Windows Installer package for ARES Terminal Console (WiX 5). Built by packaging/build.py:
+    wix build packaging/windows/ares.wxs -arch x64 -d AppVersion=<a.b.c> -d IconFile=<ares.ico>
+              -bindpath SourceDir=<frozen tree> -o dist/desktop/<key>-<version>-windows-x86_64.msi
+  Installs per machine into Program Files (the -setup.exe is the per-user, no-admin alternative).
+  The UpgradeCode never changes: it is what lets a newer .msi replace an older one.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="ARES Terminal Console" Manufacturer="ARES" Version="$(AppVersion)"
+           UpgradeCode="6B2E4F0A-93C1-4D7E-8A52-1F3C7D9E0B41" Scope="perMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="$(IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://ares-terminal-console.nacino.net" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ARES Terminal Console">
+        <Files Include="!(bindpath.SourceDir)\**" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="AppShortcut" Name="ARES Terminal Console" Target="[INSTALLFOLDER]ares-terminal-console.exe"
+                  WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RegistryValue Root="HKLM" Key="Software\ARES\ARES Terminal Console" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

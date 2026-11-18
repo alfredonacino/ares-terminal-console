@@ -117,6 +117,8 @@ def cmd_run(args) -> int:
         host=host,
         port=port,
         data_dir=args.data_dir or os.environ.get("APEX_DATA_DIR") or "",
+        # No sign-in here (./run.sh, ApexBuild): the web edition is app/main.py.
+        auth="local",
         # Set when ApexBuild is framing this app; see docs/EMBEDDING.md. When
         # it is empty the app is standalone and refuses framing entirely.
         embed_origin=args.embed_origin or os.environ.get("APEX_EMBED_ORIGIN") or "",

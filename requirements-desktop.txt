@@ -9,4 +9,8 @@ PySide6-Addons==6.9.3; sys_platform == "linux"
 pywinpty>=2.0.14; sys_platform == "win32"
 claude-agent-sdk>=0.2.152
 certifi
+# Backup & Restore in the desktop app: encrypted archives (AES-256-GCM + scrypt) and SFTP destinations.
+# The desktop has no sign-in, so SAML / LDAP / OIDC libraries are not bundled.
+cryptography>=43
+paramiko>=3.4
 pyinstaller==6.22.3

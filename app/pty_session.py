@@ -93,10 +93,15 @@ class Session:
     """One PTY and the process on the far end of it."""
 
     def __init__(self, sid: str, command: str, cols: int = 80, rows: int = 24,
-                 cwd: str = "", env: dict = None, label: str = ""):
+                 cwd: str = "", env: dict = None, label: str = "",
+                 owner_id=None, typed: str = ""):
         self.id = sid
+        # What runs (the web edition may pin an ssh command to the user's own config) and what
+        # the person typed (shown, saved and reopened).
         self.command = command
-        self.label = label or command
+        self.typed = typed or command
+        self.owner_id = owner_id
+        self.label = label or self.typed
         self.cols, self.rows = max(2, cols), max(2, rows)
         self.created = time.time()
         self.ended = None
@@ -130,7 +135,11 @@ class Session:
         # Colour scheme and the ls/ll/la wrappers first, so a caller's own
         # env still overrides them.
         env.update(SHELL_EXTRAS)
-        env.update(extra_env)
+        for k, v in extra_env.items():
+            if v is None:
+                env.pop(k, None)        # None removes it (SSH_AUTH_SOCK for a restricted user)
+            else:
+                env[k] = v
         # xterm.js speaks xterm-256color; telling the child anything else means
         # colours and key sequences that do not match what the browser renders.
         env["TERM"] = "xterm-256color"
@@ -447,8 +456,9 @@ class Session:
         return {
             "id": self.id,
             "label": self.label,
-            "command": self.command,
+            "command": self.typed,
             "cwd": self.cwd,
+            "owner_id": self.owner_id,
             "cols": self.cols,
             "rows": self.rows,
             "pid": self.pid,
@@ -478,10 +488,12 @@ class Registry:
         self._lock = threading.RLock()
 
     def create(self, command: str = "", cols: int = 80, rows: int = 24,
-               cwd: str = "", env: dict = None, label: str = "") -> Session:
+               cwd: str = "", env: dict = None, label: str = "",
+               owner_id=None, typed: str = "") -> Session:
         sid = secrets.token_urlsafe(9)
         session = Session(sid, command or DEFAULT_SHELL, cols=cols, rows=rows,
-                          cwd=cwd, env=env, label=label)
+                          cwd=cwd, env=env, label=label, owner_id=owner_id,
+                          typed=typed or command or DEFAULT_SHELL)
         with self._lock:
             self._sessions[sid] = session
         return session
@@ -490,9 +502,20 @@ class Registry:
         with self._lock:
             return self._sessions.get(sid)
 
-    def list(self) -> list:
+    def list(self, owner_id=...) -> list:
+        """Every session, or only those of one owner (the web edition: each person sees their own)."""
         with self._lock:
-            return [s.info() for s in self._sessions.values()]
+            return [s.info() for s in self._sessions.values()
+                    if owner_id is ... or s.owner_id == owner_id]
+
+    def close_owner(self, owner_id) -> int:
+        """Close every session of one owner (signed out, disabled or deleted). Returns how many."""
+        with self._lock:
+            mine = [sid for sid, s in self._sessions.items() if s.owner_id == owner_id]
+            sessions = [self._sessions.pop(sid) for sid in mine]
+        for s in sessions:
+            s.close(force=True)
+        return len(sessions)
 
     def kill(self, sid: str, force: bool = True) -> bool:
         with self._lock:

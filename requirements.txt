@@ -1,11 +1,18 @@
-# ARES Terminal Console runs on the standard library alone. This file is the one
-# exception, and it buys exactly one optional feature: the "ask" bar under the
-# terminal (app/agent.py).
+# ARES Terminal Console, web edition (app/main.py: Docker, pm2 preproduction, Kubernetes production).
 #
-# The import is lazy and every failure to find it is reported to the UI as
-# "unavailable". A terminal has to open a PTY on a machine with no SDK, no
-# Node and no network -- that is the situation people open a terminal *for* --
-# so nothing here is allowed to become a condition of starting.
+# The local mode (./run.sh, ApexBuild) and the desktop app still start on the bare standard library:
+# every import below is lazy, and a missing package only turns off the feature that needs it.
 #
-# `apex setup terminal` installs this into the module's own .venv.
-claude-agent-sdk>=0.2.152
+#   cryptography   backups (AES-256-GCM + scrypt), stored credentials, OIDC id_token signatures
+#   paramiko       SFTP backup destinations
+#   lxml, signxml  SAML 2.0 single sign-on (signature verification, no xmlsec binary)
+#   ldap3          LDAP / Active Directory sign-in
+#   segno          the QR code shown when enrolling two-factor authentication
+#   certifi        a CA bundle for HTTPS to identity providers, S3 and log collectors
+cryptography>=43
+paramiko>=3.4
+lxml>=5.1
+signxml>=4.0
+ldap3>=2.9
+segno>=1.6
+certifi

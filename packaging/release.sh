@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Publish the installers in dist/ to ARES Repository.
+# Publish the installers in dist/desktop/ to ARES Repository.
+#
+# The ARES Suite way is `suite build desktop --from-ci latest && suite publish` (uploads signed but
+# unpublished; `suite publish --publish` makes it live). This script is the older direct path.
 #
 #   packaging/release.sh [--stage] [--channel NAME] [--rollout PCT] [--notes TEXT] [--dry-run]
 #
@@ -12,10 +15,9 @@ set -euo pipefail
 
 SLUG=ares-terminal-console
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST="$ROOT/dist"
-VERSION="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "$ROOT/apexmodule.toml")"
-ARES_DIR="${ARES_REPOSITORY_DIR:-/media/RAID1/CLAUDE_PROJECTS/ARES Repository}"
-APEXCTL="${APEXCTL:-$ARES_DIR/cli/apexctl}"
+DIST="$ROOT/dist/desktop"
+VERSION="$(cat "$ROOT/VERSION")"
+APEXCTL="${APEXCTL:-$(command -v apexctl || true)}"
 ENV_FILE="${ARES_ENV_FILE:-$HOME/.config/ares-repository/$SLUG.env}"
 
 say() { printf '==> %s\n' "$*"; }
@@ -36,16 +38,16 @@ while [ $# -gt 0 ]; do
 done
 
 FILES=()
-for f in "$SLUG-$VERSION-linux-x86_64.tar.gz" "${SLUG}_${VERSION}_amd64.deb" "$SLUG-$VERSION-1-x86_64.pkg.tar.zst" \
-         "$SLUG-$VERSION-windows-x86_64-setup.exe" "$SLUG-$VERSION-windows-x86_64.zip" \
-         "$SLUG-$VERSION-macos-arm64.dmg" "$SLUG-$VERSION-macos-arm64.zip"; do
-  if [ -f "$DIST/$f" ]; then FILES+=("$DIST/$f"); echo "    take  $f"; else echo "    skip  $f (not in dist/)"; fi
+for f in "$SLUG-$VERSION-linux-x86_64".{tar.gz,deb,rpm,pkg.tar.zst,AppImage} \
+         "$SLUG-$VERSION-windows-x86_64"{-setup.exe,.msi,.zip} \
+         "$SLUG-$VERSION-macos-"{arm64,x86_64}.{dmg,zip}; do
+  if [ -f "$DIST/$f" ]; then FILES+=("$DIST/$f"); echo "    take  $f"; else echo "    skip  $f (not in dist/desktop/)"; fi
 done
-[ ${#FILES[@]} -gt 0 ] || die "nothing to publish in dist/ for $VERSION"
+[ ${#FILES[@]} -gt 0 ] || die "nothing to publish in dist/desktop/ for $VERSION"
 
 # Each file must match SHA256SUMS, so a half-copied file is never published.
 (cd "$DIST" && for f in "${FILES[@]}"; do grep "  $(basename "$f")\$" SHA256SUMS; done | sha256sum -c --quiet) \
-  || die "dist/SHA256SUMS does not match the files"
+  || die "dist/desktop/SHA256SUMS does not match the files"
 
 if [ -z "$NOTES" ]; then
   NOTES="$(awk -v v="## [$VERSION]" '$0==v{on=1;next} /^## \[/{on=0} on' "$ROOT/CHANGELOG.md" | sed '/^$/d')"
@@ -64,7 +66,8 @@ if [ "$DRY_RUN" = 1 ]; then
   exit 0
 fi
 
-[ -n "${APEX_TOKEN:-}" ] || die "APEX_TOKEN missing: run \"$ARES_DIR/tools/issue-release-tokens.sh\" $SLUG"
+[ -x "$APEXCTL" ] || die "apexctl not found: put it on PATH or set APEXCTL"
+[ -n "${APEX_TOKEN:-}" ] || die "APEX_TOKEN missing: add the app in the ARES Platform Console"
 if [ -z "${APEX_SIGNING_KEY:-}" ]; then
   [ -r "${APEX_SIGNING_KEY_FILE:-}" ] || die "no signing key (APEX_SIGNING_KEY or APEX_SIGNING_KEY_FILE in $ENV_FILE)"
   APEX_SIGNING_KEY="$(tr -d '[:space:]' < "$APEX_SIGNING_KEY_FILE")"

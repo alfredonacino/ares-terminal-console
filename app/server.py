@@ -64,6 +64,12 @@ def _manifest_version(default: str = "0.0.0") -> str:
     app already stands on, so this adds no dependency.
     """
     try:
+        v = (pathlib.Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
+        if re.fullmatch(r"\d+\.\d+\.\d+\S*", v):
+            return v
+    except OSError:
+        pass
+    try:
         import tomllib
         path = pathlib.Path(__file__).resolve().parent.parent / "apexmodule.toml"
         with path.open("rb") as fh:
@@ -112,7 +118,56 @@ TOKEN_PARAM = "token"
 TOKEN_COOKIE = "ares_terminal_console"
 # Paths that answer without the token: the health check a container
 # orchestrator polls, and nothing that touches a shell.
-OPEN_PATHS = ("/api/health",)
+OPEN_PATHS = ("/api/health", "/healthz")
+
+# The web layer (app/web): sign-in, users, 2FA, SSO, API tokens, audit, log forwarding, backup.
+#   "users": the web edition (Docker, pm2, Kubernetes): everyone signs in.
+#   "local": the desktop, ./run.sh and ApexBuild: no sign-in, one built-in local administrator.
+WEB = None
+MODE = "local"
+DATA_DIR = ""
+_LOG = None
+_CTX = threading.local()      # the signed-in user of the request this thread is serving
+
+
+class _UserData:
+    """One person's history, saved connections, costs and studied servers."""
+
+    def __init__(self, root: str):
+        os.makedirs(root, mode=0o700, exist_ok=True)
+        self.history = History(os.path.join(root, "history.json"))
+        self.ledger = agent.Ledger(os.path.join(root, "agent-costs.json"))
+        self.servers = insight_service.ServerHistory(os.path.join(root, "servers.json"))
+        self.insight = insight_service.Registry(self.servers)
+
+
+_ROOT_DATA = None
+_USER_DATA = {}
+_USER_DATA_LOCK = threading.Lock()
+
+
+def user_data(uid=None) -> "_UserData":
+    """The data of a web user (data/users/<id>/), or the data folder itself (desktop, local)."""
+    if uid is None or MODE != "users":
+        return _ROOT_DATA
+    with _USER_DATA_LOCK:
+        d = _USER_DATA.get(uid)
+        if d is None:
+            d = _USER_DATA[uid] = _UserData(os.path.join(DATA_DIR, "users", str(int(uid))))
+        return d
+
+
+class _Scoped:
+    """HISTORY, LEDGER, SERVERS and INSIGHT: whichever belongs to the request's user."""
+
+    def __init__(self, attr: str):
+        self._attr = attr
+
+    def current(self):
+        return getattr(user_data(getattr(_CTX, "uid", None)), self._attr)
+
+    def __getattr__(self, name):
+        return getattr(self.current(), name)
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 
@@ -163,6 +218,9 @@ def now_iso() -> str:
 
 
 def log(level: str, msg: str) -> None:
+    if _LOG is not None:        # one JSON object per line on stdout (LOG_FORMAT=json)
+        _LOG.app({"WARN": "warn", "ERROR": "error", "DEBUG": "debug"}.get(level, "info"), msg)
+        return
     sys.stdout.write(f"{now_iso()}  {level:<5} {msg}\n")
     sys.stdout.flush()
 
@@ -221,6 +279,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------------- plumbing
 
     def _send(self, status: int, body: bytes, ctype: str, extra: dict = None):
+        self.ares_status = status
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -316,6 +375,8 @@ class Handler(BaseHTTPRequestHandler):
         import hmac as _hmac
         if not ACCESS_TOKEN or path in OPEN_PATHS:
             return True
+        if WEB is not None and path.startswith("/api/v1/"):
+            return True            # API tokens: checked by the web layer
         if _hmac.compare_digest(self._cookie_token().encode(), ACCESS_TOKEN.encode()):
             return True
         offered = self._q1(TOKEN_PARAM)
@@ -345,14 +406,96 @@ class Handler(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8")
         return False
 
+    def _begin(self, path: str) -> bool:
+        """Sign-in, the web layer's own routes, and who this request is. False: already answered."""
+        _CTX.uid = None
+        self.ares_principal = None
+        self.ares_actor = None
+        self.ares_status = 0
+        self._terminal_route = False
+        self._t0 = time.monotonic()
+        if MODE == "local" and not self._authorized(path):
+            return False
+        if WEB is None:
+            return True
+        if WEB.handle(self):
+            return False
+        if path in OPEN_PATHS:
+            return True
+        if path == "/ws":
+            kind = "ws"
+        elif path in ("/", "/index.html"):
+            kind = "page"
+        elif path.startswith("/api/"):
+            kind = "api"
+        else:
+            return True            # the UI's scripts and styles: nothing secret in them
+        p = WEB.gate(self, kind=kind)
+        if p is None:
+            return False
+        self.ares_principal = p
+        self._terminal_route = True
+        if MODE == "users":
+            _CTX.uid = p.uid
+        return True
+
+    def _done(self, path: str) -> None:
+        """Activity log entry for a state-changing terminal call (never blocks the response)."""
+        if WEB is None or not self._terminal_route:
+            return
+        v1 = self.path.startswith("/api/v1/")
+        if self.command in ("GET", "HEAD") and not v1:
+            return
+        ip, ua = WEB.client(self)
+        WEB.record_activity(self.command, _template(path, v1), self.ares_status or 200, self._t0,
+                            self.ares_actor, ip, ua, v1=v1)
+
+    def _mine(self, sid: str):
+        """A terminal, only when it belongs to the person asking (the web edition)."""
+        session = REGISTRY.get(sid) if sid else None
+        if session is None:
+            return None
+        if MODE == "users" and session.owner_id != getattr(_CTX, "uid", None):
+            return None
+        return session
+
+    def _owner_filter(self):
+        return getattr(_CTX, "uid", None) if MODE == "users" else ...
+
+    def _api_path(self, path: str) -> str:
+        return "/api" + path[len("/api/v1"):] if path.startswith("/api/v1/") else path
+
+    def do_PUT(self):
+        self._other()
+
+    def do_DELETE(self):
+        self._other()
+
+    def do_PATCH(self):
+        self._other()
+
+    def _other(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if not self._begin(path):
+            return
+        self._body()
+        return self._json({"ok": False, "error": "method not allowed"}, status=405)
+
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
 
-        if not self._authorized(path):
+        if not self._begin(path):
             return
+        try:
+            self._get(self._api_path(path))
+        finally:
+            self._done(path)
 
-        if self._q1(sso.QUERY_PARAM) and self._accept_sso(path):
+    def _get(self, path: str):
+        if MODE == "local" and self._q1(sso.QUERY_PARAM) and self._accept_sso(path):
             return
+        if path == "/healthz":
+            return self._json({"ok": True, "version": APP_VERSION})
 
         if path == "/ws":
             return self._websocket()
@@ -363,10 +506,11 @@ class Handler(BaseHTTPRequestHandler):
                                "embedded": bool(EMBED_ORIGIN),
                                "supported": pty_session.supported(),
                                "reason": pty_session.unsupported_reason(),
-                               "sessions": len(REGISTRY.list()),
+                               "sessions": len(REGISTRY.list(self._owner_filter())),
+                               "mode": MODE,
                                "time": now_iso()})
         if path == "/api/sessions":
-            return self._json({"ok": True, "sessions": REGISTRY.list()})
+            return self._json({"ok": True, "sessions": REGISTRY.list(self._owner_filter())})
         if path == "/api/history":
             return self._json({"ok": True, **HISTORY.snapshot()})
         if path == "/api/colors":
@@ -390,7 +534,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/servers":
             return self._json({"ok": True, "servers": SERVERS.servers()})
         if path.startswith("/api/servers/"):
-            server = SERVERS.get(urllib.parse.unquote(path.split("/", 3)[3]))
+            server = SERVERS.get(urllib.parse.unquote(path.split("/", 3)[3])) \
+                if len(path.split("/", 3)) > 3 else None
             return self._json({"ok": bool(server), "server": server},
                               status=200 if server else 404)
         if path.startswith("/api/insight/"):
@@ -402,49 +547,94 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlsplit(self.path).path
-        body = self._body()
 
-        if not self._authorized(path):
+        if not self._begin(path):
             return
+        try:
+            self._post(self._api_path(path), self._body())
+        finally:
+            self._done(path)
 
+    def _open_terminal(self, body: dict):
+        """POST /api/sessions. In the web edition: the user's own HOME, their own ssh connection
+        sharing, and, without the local-shell right, only a pinned-down `ssh destination`."""
+        if not pty_session.supported():
+            return self._json({"ok": False, "error": pty_session.unsupported_reason()}, status=501)
+        command = str(body.get("command") or "").strip()
+        label = str(body.get("label") or "")
+        cwd = str(body.get("cwd") or "")
+        effective, env, p = command, None, self.ares_principal
+        owner = p.uid if (MODE == "users" and p is not None) else None
+        if owner is not None:
+            from app import remote
+            from app.web import shellpolicy
+            home = shellpolicy.user_home(DATA_DIR, owner)
+            cdir = shellpolicy.control_dir(remote.control_dir(), owner)
+            env = {"HOME": home, "ARES_USER": p.user["username"]}
+            if WEB.may_local_shell(p):
+                effective = shellpolicy.with_own_multiplexing(command, cdir) if command else ""
+                cwd = cwd if cwd and os.path.isdir(cwd) else home
+            else:
+                try:
+                    argv = shellpolicy.validate_ssh(command)
+                except shellpolicy.PolicyError as e:
+                    ip, ua = WEB.client(self)
+                    WEB.audit.record("terminal", "Terminal refused by policy", user=p.user, ip=ip,
+                                     outcome="denied", status=403, detail={"reason": str(e)})
+                    return self._json({"ok": False, "error": str(e)}, status=403)
+                effective = shellpolicy.harden(argv, home, cdir)
+                env["SSH_AUTH_SOCK"] = None
+                cwd = home
+        try:
+            session = REGISTRY.create(command=effective, typed=command, cols=int(body.get("cols") or 80),
+                                      rows=int(body.get("rows") or 24), cwd=cwd, label=label,
+                                      env=env, owner_id=owner)
+        except (OSError, RuntimeError, ValueError) as e:
+            return self._json({"ok": False, "error": str(e)}, status=500)
+        session.owner_name = p.user["username"] if p is not None else ""
+        HISTORY.record(session.id, command or pty_session.DEFAULT_SHELL, cwd=session.cwd, label=label)
+        _watch_end(session, HISTORY.current())
+        HISTORY.note_connection(session.id, session.ssh_label(), command, label=label)
+        if WEB is not None and p is not None:
+            ip, _ua = WEB.client(self)
+            WEB.audit.record("terminal", "Terminal opened", user=p.user, ip=ip, target=f"terminal={session.id}",
+                             detail={"connection": session.ssh_label() or "local shell", "label": label[:120]})
+        log("INFO", f"session {session.id} <- {session.ssh_label() or 'local shell'}"
+                    + (f" ({session.owner_name})" if owner is not None else ""))
+        return self._json({"ok": True, "session": session.info()})
+
+    def _post(self, path: str, body: dict):
         if path == "/api/sessions":
-            if not pty_session.supported():
-                return self._json({"ok": False, "error": pty_session.unsupported_reason()},
-                                  status=501)
-            command = str(body.get("command") or "").strip()
-            cwd = str(body.get("cwd") or "")
-            try:
-                session = REGISTRY.create(
-                    command=command,
-                    cols=int(body.get("cols") or 80),
-                    rows=int(body.get("rows") or 24),
-                    cwd=cwd,
-                    label=str(body.get("label") or ""),
-                )
-            except (OSError, RuntimeError, ValueError) as e:
-                return self._json({"ok": False, "error": str(e)}, status=500)
-            HISTORY.record(session.id, command or pty_session.DEFAULT_SHELL,
-                           cwd=session.cwd, label=str(body.get("label") or ""))
-            _watch_end(session)
-            HISTORY.note_connection(session.id, session.ssh_label(), command,
-                                    label=str(body.get("label") or ""))
-            log("INFO", f"session {session.id} <- {command or pty_session.DEFAULT_SHELL}")
-            return self._json({"ok": True, "session": session.info()})
+            return self._open_terminal(body)
 
         parts = path.strip("/").split("/")
         if len(parts) == 4 and parts[1] == "sessions" and parts[3] == "kill":
-            ok = REGISTRY.kill(parts[2])
+            session = self._mine(parts[2])
+            ok = bool(session) and REGISTRY.kill(parts[2])
             INSIGHT.drop(parts[2])
+            if ok and WEB is not None and self.ares_principal is not None:
+                ip, _ua = WEB.client(self)
+                WEB.audit.record("terminal", "Terminal closed", user=self.ares_principal.user, ip=ip,
+                                 target=f"terminal={parts[2]}",
+                                 detail={"connection": session.ssh_label() or "local shell"})
             return self._json({"ok": ok})
 
         if len(parts) == 4 and parts[1] == "sessions" and parts[3] == "command":
-            session = REGISTRY.get(parts[2])
+            session = self._mine(parts[2])
             if session is None:
                 return self._json({"ok": False, "error": "That pane has closed."}, status=404)
             entry = HISTORY.log_command(session.id, str(body.get("command") or ""),
-                                        pane=session.label or session.command,
+                                        pane=session.label or session.typed,
                                         connection=session.ssh_label(),
                                         how=str(body.get("how") or "typed")[:20])
+            if WEB is not None and self.ares_principal is not None and str(body.get("command") or "").strip():
+                from app.web.shellpolicy import redact
+                ip, _ua = WEB.client(self)
+                WEB.audit.record("terminal", "Command sent", user=self.ares_principal.user, ip=ip,
+                                 target=f"terminal={session.id}",
+                                 detail={"command": redact(str(body.get("command"))),
+                                         "connection": session.ssh_label() or "local shell",
+                                         "how": str(body.get("how") or "typed")[:20]})
             return self._json({"ok": True, "entry": entry})
         if path == "/api/commands/clear":
             HISTORY.clear_commands()
@@ -472,8 +662,12 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/agent/ask":
             prompt = str(body.get("prompt") or "")
+            cwd = str(body.get("cwd") or "")
+            if MODE == "users":
+                from app.web import shellpolicy
+                cwd = shellpolicy.user_home(DATA_DIR, _CTX.uid)
             result = agent.ask(prompt,
-                               cwd=str(body.get("cwd") or ""),
+                               cwd=cwd,
                                model=str(body.get("model") or ""))
             # Recorded whichever way it went. An ask that failed after the
             # model had already run still cost something, and a ledger that
@@ -497,7 +691,7 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------ server tools
 
     def _where(self, sid: str):
-        session = REGISTRY.get(sid)
+        session = self._mine(sid)
         if session is None:
             return self._json({"ok": False, "error": "That pane has closed."}, status=404)
         try:
@@ -517,7 +711,7 @@ class Handler(BaseHTTPRequestHandler):
             for c in s.get("connections", []):
                 known.setdefault(c, s)
         live = {}
-        for s in REGISTRY.list():
+        for s in REGISTRY.list(self._owner_filter()):
             if s.get("alive") and s.get("ssh"):
                 live[s["ssh"]] = live.get(s["ssh"], 0) + 1
         rows = HISTORY.servers()
@@ -538,9 +732,12 @@ class Handler(BaseHTTPRequestHandler):
         parts = path.strip("/").split("/")[2:]
         if len(parts) < 2:
             return self._json({"ok": False, "error": "unknown endpoint"}, status=404)
-        session = REGISTRY.get(parts[0])
+        session = self._mine(parts[0])
         if session is None:
             return self._json({"ok": False, "error": "That pane has closed."}, status=404)
+        if MODE == "users" and not session.ssh_label() and not WEB.may_local_shell(self.ares_principal):
+            return self._json({"ok": False, "error": "The server tools work on your ssh panes only."},
+                              status=403)
         tool, step = parts[1], "/".join(parts[2:])
         post = self.command == "POST"
         try:
@@ -616,7 +813,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": False, "error": "origin not allowed"}, status=403)
 
         sid = self._q1("session")
-        session = REGISTRY.get(sid) if sid else None
+        session = self._mine(sid)
         if session is None:
             return self._json({"ok": False, "error": "unknown session"}, status=404)
 
@@ -626,9 +823,15 @@ class Handler(BaseHTTPRequestHandler):
             log("WARN", f"websocket upgrade failed: {e}")
             return
 
-        log("INFO", f"attach {session.id} ({session.label})")
-        pump(ws, session)
-        log("INFO", f"detach {session.id}")
+        # Authorised once, here. Signing out (or an administrator ending the sign-in) closes it.
+        release = None
+        if WEB is not None and MODE == "users" and self.ares_principal is not None:
+            release = WEB.register_socket(self.ares_principal, lambda: ws.close(4401, "signed out"))
+        try:
+            pump(ws, session)
+        finally:
+            if release:
+                release()
 
     # ------------------------------------------------------------------ static
 
@@ -748,11 +951,56 @@ class Server(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
-def _watch_end(session) -> None:
-    """Close the session's history entries when its process ends."""
-    session.on_end = lambda s: HISTORY.finish(s.id, s.exit_code)
+def _watch_end(session, history=None) -> None:
+    """Close the session's history entries when its process ends (in its owner's history: the
+    process ends on a thread that is serving nobody)."""
+    hist = history if history is not None else HISTORY.current()
+    session.on_end = lambda s: hist.finish(s.id, s.exit_code)
     if session.ended is not None:      # it ended before the hook was set
-        HISTORY.finish(session.id, session.exit_code)
+        hist.finish(session.id, session.exit_code)
+
+
+_ID_SEGMENT = re.compile(r"^/api/(v1/)?(sessions|servers|insight)/[^/]+")
+
+
+def _template(path: str, v1: bool) -> str:
+    """A route template for the activity log: ids replaced, so /api/sessions/abc/kill is one route."""
+    return _ID_SEGMENT.sub(lambda m: f"/api/{m.group(1) or ''}{m.group(2)}/{{id}}", path)[:300]
+
+
+def _web_hooks() -> dict:
+    """What the web layer's admin pages need from the terminal side."""
+    def terminals():
+        return REGISTRY.list()
+
+    def kill_terminal(sid):
+        s = REGISTRY.get(sid)
+        if s is None:
+            return None
+        info = {"label": s.label[:120], "owner_id": s.owner_id, "connection": s.ssh_label() or "local shell"}
+        REGISTRY.kill(sid)
+        user_data(s.owner_id).insight.drop(sid)
+        return info
+
+    def close_user(uid):
+        ids = [s["id"] for s in REGISTRY.list(uid)]
+        for sid in ids:
+            kill_terminal(sid)
+        return len(ids)
+
+    def user_deleted(uid):
+        import shutil
+        close_user(uid)
+        with _USER_DATA_LOCK:
+            _USER_DATA.pop(uid, None)
+        shutil.rmtree(os.path.join(DATA_DIR, "users", str(int(uid))), ignore_errors=True)
+
+    hooks = {"terminals": terminals, "kill_terminal": kill_terminal, "user_disabled": close_user,
+             "user_deleted": user_deleted, "shutdown": REGISTRY.close_all}
+    if MODE == "local":
+        from app.web.webapp import reexec
+        hooks["restart"] = reexec
+    return hooks
 
 
 def _reaper():
@@ -763,7 +1011,7 @@ def _reaper():
 
 
 def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
-          embed_origin: str = "", access_token: str = None):
+          embed_origin: str = "", access_token: str = None, auth: str = None):
     """Configure the app and bind its socket. Returns (httpd, url).
 
     The URL carries the access token when there is one, so it is the link to
@@ -774,14 +1022,33 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
     app listens beyond loopback, read from ARES_ACCESS_TOKEN or kept in the
     data folder. "" turns it off; any other string is the token.
     """
-    global HISTORY, LEDGER, SHIMS, SSO, ACCESS_TOKEN, INSIGHT, SERVERS
+    global HISTORY, LEDGER, SHIMS, SSO, ACCESS_TOKEN, INSIGHT, SERVERS, WEB, MODE, DATA_DIR, _LOG, _ROOT_DATA
 
-    data_dir = data_dir or default_data_dir()
+    data_dir = os.path.abspath(data_dir or default_data_dir())
     os.makedirs(data_dir, exist_ok=True)
-    HISTORY = History(os.path.join(data_dir, "history.json"))
-    LEDGER = agent.Ledger(os.path.join(data_dir, "agent-costs.json"))
-    SERVERS = insight_service.ServerHistory(os.path.join(data_dir, "servers.json"))
-    INSIGHT = insight_service.Registry(SERVERS)
+    DATA_DIR = data_dir
+    MODE = (auth or os.environ.get("ARES_AUTH", "") or "local").strip().lower()
+    if MODE not in ("users", "local"):
+        raise ValueError("auth must be users or local")
+
+    # The web layer first: it applies a staged restore before anything opens the data folder.
+    # The desktop runs without it when its packages are missing (the terminal is standard library).
+    try:
+        from app.web import logs as web_logs
+        from app.web.webapp import WebApp
+        WEB = WebApp(data_dir, MODE, hooks=None, headers=security_headers)
+        _LOG = web_logs.LOG
+    except ImportError as e:
+        if MODE == "users":
+            raise SystemExit(f"the web edition needs its packages (pip install -r requirements.txt): {e}")
+        WEB = None
+        log("WARN", f"sign-in, backup and audit pages unavailable: {e}")
+
+    _ROOT_DATA = _UserData(data_dir)
+    HISTORY, LEDGER, SERVERS, INSIGHT = (_Scoped("history"), _Scoped("ledger"), _Scoped("servers"),
+                                         _Scoped("insight"))
+    if WEB is not None:
+        WEB.hooks = _web_hooks()
 
     # Colour. A pane is monochrome without both halves of this: a scheme in
     # LS_COLORS, and an `ls` that has been asked to use it. See shell_env.py.
@@ -797,7 +1064,9 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
         log("WARN", f"ignoring --embed-origin {embed_origin!r}: only a loopback "
                     "http origin such as http://127.0.0.1:8800 is accepted")
 
-    if access_token is None:
+    if MODE == "users":
+        access_token = ""          # everyone signs in instead
+    elif access_token is None:
         access_token = os.environ.get("ARES_ACCESS_TOKEN", "").strip()
         if not access_token and host not in LOOPBACK_HOSTS:
             access_token = persistent_token(data_dir)
@@ -810,7 +1079,7 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
     if ACCESS_TOKEN:
         url += f"?{TOKEN_PARAM}={urllib.parse.quote(ACCESS_TOKEN)}"
 
-    log("INFO", f"{APP_NAME} {APP_VERSION} on {url}")
+    log("INFO", f"{APP_NAME} {APP_VERSION} on {url} ({'sign-in required' if MODE == 'users' else 'no sign-in'})")
     log("INFO", f"history: {HISTORY.path}")
     if SHIMS:
         log("INFO", "wrappers: " + ", ".join(f"{k} -> {v}" for k, v in SHIMS.items()))
@@ -820,7 +1089,7 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
         log("INFO", f"embedded: {EMBED_ORIGIN} may frame this app")
     if not pty_session.supported():
         log("WARN", pty_session.unsupported_reason())
-    if host not in LOOPBACK_HOSTS:
+    if host not in LOOPBACK_HOSTS and MODE == "local":
         if ACCESS_TOKEN:
             log("INFO", f"listening on {host}; the access token is required. "
                         "Put TLS in front of this before it leaves a private network.")
@@ -833,10 +1102,10 @@ def start(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
 
 
 def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
-          embed_origin: str = "", open_browser: bool = False) -> int:
+          embed_origin: str = "", open_browser: bool = False, auth: str = None) -> int:
     """Start the app and block until told to stop."""
     httpd, url = start(host=host, port=port, data_dir=data_dir,
-                       embed_origin=embed_origin)
+                       embed_origin=embed_origin, auth=auth)
 
     def _shutdown(signum, frame):
         log("INFO", "shutting down; closing every session")
@@ -857,4 +1126,6 @@ def serve(host: str = "127.0.0.1", port: int = 0, data_dir: str = "",
     finally:
         REGISTRY.close_all()
         httpd.server_close()
+        if _LOG is not None:
+            _LOG.stop_all()
     return 0

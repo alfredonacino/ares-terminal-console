@@ -3,9 +3,10 @@
 # ARES Terminal Console
 
 Split-pane terminals with broadcast, keep-alive and a connection history. One
-codebase, three ways to run it: a **desktop application** for Linux, macOS and
-Windows, a **Docker image** you open in a browser, and a module of the
-ApexBuild suite.
+codebase, three ways to run it: a **web application** with users, two-factor
+authentication and single sign-on (https://ares-terminal-console.nacino.net), a
+login-free **desktop application** for Linux, macOS and Windows, and a module of
+the ApexBuild suite.
 
 *Formerly Apex Terminal. 2.0.0 is the rename, plus the desktop and Docker
 builds; a 1.x history folder is moved across on first start.*
@@ -20,31 +21,61 @@ these four documents, as PDFs and a PowerPoint; `packaging/register-ares-suite.s
 
 | | |
 | --- | --- |
-| **Linux** | `ares-terminal-console_<v>_amd64.deb` (Debian, Ubuntu), `ares-terminal-console-<v>-1-x86_64.pkg.tar.zst` (Arch, `pacman -U`), or the `.tar.gz` with a per-user `./install.sh` that needs no root |
-| **macOS** (Apple silicon) | `ares-terminal-console-<v>-macos-arm64.dmg` — drag to Applications. Unsigned for now: the first launch is right-click → Open |
-| **Windows** | `ares-terminal-console-<v>-windows-x86_64-setup.exe` (no administrator rights needed), or the portable `.zip` |
-| **Docker** | `docker run -d -p 8080:8080 -v ares-terminal:/data docker.cybercontrol.tech/ares/terminal-console` |
+| **Web** | https://ares-terminal-console.nacino.net (demo: https://ares-terminal-console-demo.nacino.net) — sign in with your account, Microsoft Entra ID, SAML or LDAP |
+| **Linux** | `ares-terminal-console-<v>-linux-x86_64` `.deb` (Debian, Ubuntu), `.rpm` (Red Hat, Rocky, Fedora), `.pkg.tar.zst` (Arch, CachyOS, `pacman -U`), `.AppImage` (any), or the `.tar.gz` with a per-user `./install.sh` that needs no root |
+| **macOS** (Apple silicon, Intel) | `ares-terminal-console-<v>-macos-<arm64\|x86_64>.dmg` — drag to Applications. Unsigned for now: the first launch is right-click → Open |
+| **Windows** | `ares-terminal-console-<v>-windows-x86_64-setup.exe` (no administrator rights needed), `.msi` (per machine, for managed installs), or the portable `.zip` |
+| **Docker** (web edition) | `docker run -d -p 3222:3222 -v ares-terminal:/app/data docker.cybercontrol.tech/ares/ares-terminal-console` |
+
+Per-OS details, checksums and uninstalling: [docs/INSTALL.md](docs/INSTALL.md).
 
 Releases are published, signed, to **ARES Repository**
 (<https://aresrepo.cybercontrol.tech>). They are not attached to the GitHub or
 GitLab release pages: the signed manifest on the repository is what proves a
 download is genuine, and a second copy would be a second thing to keep in step.
 
+### Web edition
+
+The same terminals, shared by a team in the browser, with what a shared server needs in front of them:
+
+- **Users and roles** (administrator, user). A new installation creates **`aresadmin`** with a one-time
+  password in `DATA_DIR/initial-admin-password.txt` (or `ARES_ADMIN_PASSWORD`), changed at first sign-in.
+- **Two-factor authentication** (TOTP, any authenticator app, ten recovery codes), required for every
+  local and LDAP account by default.
+- **Single sign-on**: Microsoft Entra ID (OpenID Connect), any SAML 2.0 identity provider, and LDAP /
+  Active Directory, with group-based roles and access, and accounts created on first sign-in.
+- **Isolation**: each user's panes, history, connections and SSH known hosts are their own; a shell on
+  the server itself is for administrators unless the policy says otherwise.
+- **Backup & Restore** to local storage, SFTP and S3, encrypted (AES-256-GCM), scheduled, with retention;
+  restore from the page, the first-run screen or `python app/main.py backup restore`.
+- **API tokens** for everything under `/api/v1/`, an append-only **audit & activity** log with CSV/JSON
+  export, and **JSON logs forwarded** to a SIEM over syslog or HTTPS.
+
+It runs in the ARES Suite as `prod` (Kubernetes) and `pre` (demo: web tier on Kubernetes, server under
+pm2). The desktop app has **no sign-in** — it is one person's terminal on their own computer — but has the
+same Backup & Restore, audit, log forwarding and API tokens under **Administration**.
+
+[Administration](docs/ADMIN_GUIDE.md) · [User guide](docs/USER_GUIDE.md) · [Deployment](docs/DEPLOYMENT.md) ·
+[Security](docs/SECURITY.md) · [Backup](docs/BACKUP.md) · [API](docs/API.md) · [Logging](docs/LOGGING.md)
+
 ### From source
 
 ```sh
-./run.sh                # then open the URL it prints
+./run.sh                # local mode: open the URL it prints (no sign-in, loopback only)
 ./run.sh --port 9001
+pip install -r requirements.txt && python3 app/main.py   # the web edition on :3222
 ```
 
-Python 3.11+ and **nothing else** — no pip install, no build step. A terminal is
+Python 3.11+ and **nothing else** for the local mode — no pip install, no build step. A terminal is
 what you reach for when a machine is already in a bad way, and "install this
 first" is the wrong answer at that moment.
 
-There is exactly one optional dependency, `claude-agent-sdk`, and it buys one
-optional feature: the [ask bar](#asking-about-a-command). Everything above
-still holds without it — the import is lazy, and a missing SDK costs you the
-question box and nothing else.
+The local mode has one optional dependency, `claude-agent-sdk`
+(`pip install claude-agent-sdk`), and it buys one optional feature: the
+[ask bar](#asking-about-a-command). Everything above still holds without it —
+the import is lazy, and a missing SDK costs you the question box and nothing
+else. `requirements.txt` is the web edition's list (cryptography, paramiko,
+lxml/signxml, ldap3, segno), imported just as lazily.
 
 ## What it does
 

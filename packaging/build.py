@@ -5,14 +5,18 @@
     python packaging/build.py --skip-freeze       # re-package the last frozen tree
 
 Formats:
-    Linux    tar (tar.gz with install.sh), deb
-    Windows  zip, inno (setup .exe, needs Inno Setup 6)
+    Linux    tar (tar.gz with install.sh), deb, rpm and arch (.pkg.tar.zst, both with nfpm),
+             appimage (needs appimagetool)
+    Windows  zip, inno (setup .exe, needs Inno Setup 6), msi (needs the WiX 5 `wix` tool)
     macOS    dmg (the .app in a disk image), zip (the .app zipped)
 
 Linux builds should run in an old-glibc container so the result runs on older distributions:
-    packaging/build-linux.sh
+    packaging/build-linux.sh                       (tar, deb inside Debian 11)
+    python packaging/build.py --skip-freeze --no-self-test --formats rpm,arch,appimage
+                                                   (then repackage that same frozen tree on the host)
 
-Everything lands in dist/, with SHA256SUMS.
+Every file is named <key>-<version>-<linux|windows|macos>-<arch>.<ext> (ARES Suite standard) and lands in
+dist/desktop/, with SHA256SUMS. scripts/build-desktop.sh runs all of this for the host OS.
 """
 from __future__ import annotations
 
@@ -32,14 +36,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
 FROZEN = BUILD / "dist"
-OUT = ROOT / "dist"
+OUT = ROOT / "dist" / "desktop"
 APP_ID = "ares-terminal-console"
 APP_NAME = "ARES Terminal Console"
-VERSION = re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "apexmodule.toml").read_text(), re.M).group(1)
+def _version() -> str:
+    """VERSION is the one place the version lives; apexmodule.toml only mirrors it for ApexBuild."""
+    env = os.environ.get("APP_VERSION", "").strip()
+    if env:
+        return env
+    f = ROOT / "VERSION"
+    if f.is_file() and f.read_text().strip():
+        return f.read_text().strip()
+    return re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "apexmodule.toml").read_text(), re.M).group(1)
+
+
+VERSION = _version()
 PLATFORM = {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux")
 ARCH = {"x86_64": "x86_64", "amd64": "x86_64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine().lower(),
                                                                                        platform.machine().lower())
-DEFAULT_FORMATS = {"linux": ["tar", "deb"], "windows": ["zip", "inno"], "macos": ["dmg", "zip"]}
+DEFAULT_FORMATS = {"linux": ["tar", "deb"], "windows": ["zip", "inno", "msi"], "macos": ["dmg", "zip"]}
 
 
 def step(msg: str) -> None:
@@ -157,7 +172,7 @@ def build_deb(tree: Path) -> Path:
     with tarfile.open(work / "data.tar.gz", "w:gz") as t:
         for p in sorted(root.iterdir()):
             t.add(p, arcname=f"./{p.name}", filter=owner_root)
-    out = OUT / f"{APP_ID}_{VERSION}_{'amd64' if ARCH == 'x86_64' else ARCH}.deb"
+    out = OUT / f"{base_name()}.deb"
     out.unlink(missing_ok=True)
     _ar(out, [work / "debian-binary", work / "control.tar.gz", work / "data.tar.gz"])
     return out
@@ -209,21 +224,126 @@ def build_dmg(tree: Path) -> Path:
     return out
 
 
-BUILDERS = {"tar": build_tar, "deb": build_deb, "zip": build_zip, "inno": build_inno, "dmg": build_dmg}
+LINUX_DEPENDS = {
+    # What Qt WebEngine takes from the system (the frozen tree leaves these out on purpose, see ares.spec).
+    "rpm": ["nss", "mesa-libgbm", "mesa-libEGL", "fontconfig", "glib2", "dbus-libs", "libxkbcommon",
+            "libxkbcommon-x11", "libXcomposite", "libXdamage", "libXrandr", "libXtst", "libxkbfile",
+            "libxshmfence", "alsa-lib"],
+    "archlinux": ["glibc", "gcc-libs", "zlib", "hicolor-icon-theme", "nss", "mesa", "libglvnd", "fontconfig",
+                  "glib2", "dbus", "libxkbcommon", "libxkbcommon-x11", "xcb-util-cursor", "xcb-util-wm",
+                  "xcb-util-image", "xcb-util-keysyms", "xcb-util-renderutil", "libxcomposite", "libxdamage",
+                  "libxrandr", "libxtst", "libxkbfile", "libxshmfence", "alsa-lib"],
+}
+# Not always packaged in the base repositories (EPEL on RHEL/Rocky): recommended, not required.
+RPM_RECOMMENDS = ["xcb-util-cursor", "xcb-util-wm", "xcb-util-image", "xcb-util-keysyms", "xcb-util-renderutil",
+                  "xdg-utils"]
+
+
+def _nfpm(tree: Path, packager: str, ext: str) -> Path:
+    """rpm and Arch packages of the frozen tree, with nfpm (the same /opt layout as the .deb)."""
+    nfpm = shutil.which("nfpm") or os.environ.get("NFPM", "")
+    if not nfpm:
+        raise SystemExit("nfpm is not installed (https://nfpm.goreleaser.com; "
+                         "go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1)")
+    stage = BUILD / "stage" / "nfpm"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+    desktop = (ROOT / "packaging/linux" / f"{APP_ID}.desktop").read_text().replace("@EXEC@", f"/opt/{APP_ID}/{APP_ID}")
+    (stage / f"{APP_ID}.desktop").write_text(desktop)
+    deps = LINUX_DEPENDS[packager]
+    rec = RPM_RECOMMENDS if packager == "rpm" else []
+    yaml = "\n".join([
+        f"name: {APP_ID}", "arch: amd64" if ARCH == "x86_64" else f"arch: {ARCH}", "platform: linux",
+        f"version: {VERSION}", "release: 1", "section: utils", "maintainer: ARES", "vendor: ARES",
+        f"description: {APP_NAME} - split-pane terminals with broadcast, keep-alive and a connection history",
+        "homepage: https://ares-terminal-console.nacino.net", "license: MIT",
+        "depends:", *[f"  - {d}" for d in deps],
+        *(["recommends:", *[f"  - {d}" for d in rec]] if rec else []),
+        "contents:",
+        f"  - src: {tree}", f"    dst: /opt/{APP_ID}", "    type: tree",
+        f"  - src: /opt/{APP_ID}/{APP_ID}", f"    dst: /usr/bin/{APP_ID}", "    type: symlink",
+        f"  - src: {stage / (APP_ID + '.desktop')}", f"    dst: /usr/share/applications/{APP_ID}.desktop",
+        f"  - src: {ROOT / 'packaging/icons/ares.png'}",
+        f"    dst: /usr/share/icons/hicolor/512x512/apps/{APP_ID}.png",
+        f"  - src: {ROOT / 'packaging/icons/ares-256.png'}",
+        f"    dst: /usr/share/icons/hicolor/256x256/apps/{APP_ID}.png",
+        f"  - src: {ROOT / 'LICENSE'}", f"    dst: /usr/share/licenses/{APP_ID}/LICENSE",
+        # PyInstaller executables carry their archive after the ELF image: never strip them.
+        *(["archlinux:", "  packager: ARES"] if packager == "archlinux" else []),
+        ""])
+    cfg = stage / "nfpm.yaml"
+    cfg.write_text(yaml)
+    out = OUT / f"{base_name()}.{ext}"
+    out.unlink(missing_ok=True)
+    run([nfpm, "package", "-f", cfg, "-p", packager, "-t", out])
+    return out
+
+
+def build_rpm(tree: Path) -> Path:
+    return _nfpm(tree, "rpm", "rpm")
+
+
+def build_arch(tree: Path) -> Path:
+    return _nfpm(tree, "archlinux", "pkg.tar.zst")
+
+
+def build_appimage(tree: Path) -> Path:
+    """One self-contained file for any distribution (it still uses the system's graphics stack)."""
+    tool = os.environ.get("APPIMAGETOOL") or shutil.which("appimagetool") or shutil.which("appimagetool-x86_64.AppImage")
+    if not tool:
+        raise SystemExit("appimagetool is not installed (https://github.com/AppImage/appimagetool/releases)")
+    appdir = BUILD / "stage" / "AppDir"
+    shutil.rmtree(appdir, ignore_errors=True)
+    shutil.copytree(tree, appdir / "usr/lib" / APP_ID, symlinks=True)
+    apprun = appdir / "AppRun"
+    apprun.write_text('#!/bin/sh\nHERE="$(dirname "$(readlink -f "$0")")"\n'
+                      f'exec "$HERE/usr/lib/{APP_ID}/{APP_ID}" "$@"\n')
+    apprun.chmod(0o755)
+    desktop = (ROOT / "packaging/linux" / f"{APP_ID}.desktop").read_text().replace("@EXEC@", APP_ID)
+    (appdir / f"{APP_ID}.desktop").write_text(desktop)
+    shutil.copy2(ROOT / "packaging/icons/ares.png", appdir / f"{APP_ID}.png")
+    shutil.copy2(ROOT / "packaging/icons/ares.png", appdir / ".DirIcon")
+    out = OUT / f"{base_name()}.AppImage"
+    out.unlink(missing_ok=True)
+    env = dict(os.environ, ARCH=ARCH, APPIMAGE_EXTRACT_AND_RUN="1")
+    run([tool, "--no-appstream", appdir, out], env=env)
+    return out
+
+
+def build_msi(tree: Path) -> Path:
+    """Windows Installer package (per machine), with WiX 5: dotnet tool install --global wix --version 5.0.2."""
+    wix = shutil.which("wix")
+    if not wix:
+        raise SystemExit("WiX 5 is not installed (dotnet tool install --global wix --version 5.0.2)")
+    out = OUT / f"{base_name()}.msi"
+    out.unlink(missing_ok=True)
+    # MSI versions are numeric a.b.c; a pre-release suffix is dropped for the installer database only.
+    msi_version = re.match(r"\d+(\.\d+){0,2}", VERSION).group(0)
+    run([wix, "build", ROOT / "packaging" / "windows" / "ares.wxs", "-arch", "x64",
+         "-d", f"AppVersion={msi_version}", "-d", f"IconFile={ROOT / 'packaging/icons/ares.ico'}",
+         "-bindpath", f"SourceDir={tree}", "-o", out])
+    return out
+
+
+BUILDERS = {"tar": build_tar, "deb": build_deb, "zip": build_zip, "inno": build_inno, "dmg": build_dmg,
+            "rpm": build_rpm, "arch": build_arch, "appimage": build_appimage, "msi": build_msi}
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--formats", help="comma separated; default: " + ",".join(DEFAULT_FORMATS[PLATFORM]))
     p.add_argument("--skip-freeze", action="store_true", help="package the existing build/dist tree")
+    p.add_argument("--no-self-test", action="store_true",
+                   help="skip the frozen self-test (only when repackaging a tree that already passed it)")
     args = p.parse_args()
     formats = args.formats.split(",") if args.formats else DEFAULT_FORMATS[PLATFORM]
     print(f"{APP_NAME} {VERSION} for {PLATFORM}-{ARCH}: {', '.join(formats)}")
     tree = frozen_tree() if args.skip_freeze else freeze(venv_python())
     if not tree.exists():
         raise SystemExit(f"{tree} does not exist: run without --skip-freeze")
-    self_test(tree)
-    OUT.mkdir(exist_ok=True)
+    if not args.no_self_test:
+        self_test(tree)
+    OUT.mkdir(parents=True, exist_ok=True)
     built = []
     for f in formats:
         step(f"packaging {f}")

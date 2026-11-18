@@ -6,13 +6,17 @@
 #   packaging/build-remote.sh windows      one of them
 #
 # PyInstaller does not cross-compile, so each platform builds on its own kind of
-# machine. Hosts: ARES_WIN_HOST and ARES_MAC_HOST, defaulting to the ones the
-# other ARES apps release from. Each build gets a fresh virtualenv and must pass
-# the frozen self-test, or nothing is copied back.
+# machine. Hosts: ARES_WIN_HOST and ARES_MAC_HOST (user@host), set in your shell or in
+# the git-ignored packaging/.build-hosts.env -- never in a tracked file. Each build gets a
+# fresh virtualenv and must pass the frozen self-test, or nothing is copied back.
+# CI (.github/workflows/release.yml) builds the same installers without any of this.
 set -euo pipefail
-WIN_HOST="${ARES_WIN_HOST:-administrator@192.168.5.10}"
+_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+[ -f "$_here/.build-hosts.env" ] && . "$_here/.build-hosts.env"
+WIN_HOST="${ARES_WIN_HOST:-}"
 WIN_ROOT='C:\ares-build'
-MAC_HOST="${ARES_MAC_HOST:-alfreddgreat@192.168.10.154}"
+MAC_HOST="${ARES_MAC_HOST:-}"
 MAC_ROOT='ares-build'
 MAC_PYTHON="${ARES_MAC_PYTHON:-/opt/homebrew/opt/python@3.13/bin/python3.13}"
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR)
@@ -20,13 +24,20 @@ SCP=(scp -q -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP=ares-terminal-console
-VERSION="$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "$ROOT/apexmodule.toml")"
+VERSION="$(cat "$ROOT/VERSION")"
 TAG="$APP-$VERSION"
 LOGS="$ROOT/build/remote-$VERSION"
 PLATFORMS="${*:-windows macos}"
-mkdir -p "$LOGS" "$ROOT/dist"
+DIST="$ROOT/dist/desktop"
+mkdir -p "$LOGS" "$DIST"
+for p in $PLATFORMS; do
+  case "$p" in
+    windows) [ -n "$WIN_HOST" ] || { echo "set ARES_WIN_HOST=user@host (or use CI)" >&2; exit 2; } ;;
+    macos)   [ -n "$MAC_HOST" ] || { echo "set ARES_MAC_HOST=user@host (or use CI)" >&2; exit 2; } ;;
+  esac
+done
 
-[ -z "$(git -C "$ROOT" status --porcelain -- app packaging apexmodule.toml requirements-desktop.txt)" ] \
+[ -z "$(git -C "$ROOT" status --porcelain -- app packaging apexmodule.toml VERSION ares.app.json requirements-desktop.txt)" ] \
   || echo "note: uncommitted changes are NOT in this build; it is built from HEAD"
 TARBALL="$LOGS/src.tar.gz"
 git -C "$ROOT" archive --format=tar.gz -o "$TARBALL" HEAD
@@ -39,7 +50,7 @@ for p in $PLATFORMS; do
       printf '%s\r\n' '@echo off' "if not exist $WIN_ROOT mkdir $WIN_ROOT" "cd /d $WIN_ROOT" \
         "rmdir /s /q $TAG 2>nul" "mkdir $TAG" "tar -xzf $TAG.tar.gz -C $TAG" "cd $TAG" \
         'set "PATH=C:\Program Files (x86)\Inno Setup 6;%PATH%"' \
-        "python packaging\\build.py --formats zip,inno > $WIN_ROOT\\$TAG.log 2>&1" \
+        "python packaging\\build.py --formats zip,inno,msi > $WIN_ROOT\\$TAG.log 2>&1" \
         "echo BUILD_EXIT=%ERRORLEVEL% >> $WIN_ROOT\\$TAG.log" > "$BAT"
       "${SSH[@]}" "$WIN_HOST" "if not exist $WIN_ROOT mkdir $WIN_ROOT" >/dev/null
       "${SCP[@]}" "$TARBALL" "$WIN_HOST:C:/ares-build/$TAG.tar.gz"
@@ -73,18 +84,18 @@ done
 
 for p in $PLATFORMS; do
   mkdir -p "$LOGS/$p-dist"
-  if [ "$p" = windows ]; then "${SCP[@]}" "$WIN_HOST:C:/ares-build/$TAG/dist/*" "$LOGS/$p-dist/"
-  else "${SCP[@]}" "$MAC_HOST:$MAC_ROOT/$TAG/dist/*" "$LOGS/$p-dist/"; fi
+  if [ "$p" = windows ]; then "${SCP[@]}" "$WIN_HOST:C:/ares-build/$TAG/dist/desktop/*" "$LOGS/$p-dist/"
+  else "${SCP[@]}" "$MAC_HOST:$MAC_ROOT/$TAG/dist/desktop/*" "$LOGS/$p-dist/"; fi
   ( cd "$LOGS/$p-dist" && tr -d '\r' < SHA256SUMS | sed 's/ \*/  /' | sha256sum -c --quiet - ) \
     || { echo "the $p artefacts do not match their checksums"; exit 1; }
-  cp "$LOGS/$p-dist/"*"$VERSION"* "$ROOT/dist/"
+  cp "$LOGS/$p-dist/"*"$VERSION"* "$DIST/"
 done
-# Merge every SHA256SUMS that names this version into dist/SHA256SUMS.
-cat "$ROOT/dist/SHA256SUMS" "$LOGS"/*-dist/SHA256SUMS 2>/dev/null | tr -d '\r' | sed 's/ \*/  /' \
+# Merge every SHA256SUMS that names this version into dist/desktop/SHA256SUMS.
+cat "$DIST/SHA256SUMS" "$LOGS"/*-dist/SHA256SUMS 2>/dev/null | tr -d '\r' | sed 's/ \*/  /' \
   | awk 'NF==2 {sums[$2]=$0} END {for (f in sums) print sums[f]}' | sort -k2 \
-  | while read -r sum name; do [ -f "$ROOT/dist/$name" ] && printf '%s  %s\n' "$sum" "$name"; done \
+  | while read -r sum name; do [ -f "$DIST/$name" ] && printf '%s  %s\n' "$sum" "$name"; done \
   > "$LOGS/SHA256SUMS.merged"   # only files still in dist/: an old version's entries go
-cp "$LOGS/SHA256SUMS.merged" "$ROOT/dist/SHA256SUMS"
-(cd "$ROOT/dist" && sha256sum -c --quiet SHA256SUMS) || { echo "dist/SHA256SUMS does not verify"; exit 1; }
-echo "dist/ checksums verified"
-ls -1 "$ROOT/dist" | grep "$VERSION"
+cp "$LOGS/SHA256SUMS.merged" "$DIST/SHA256SUMS"
+(cd "$DIST" && sha256sum -c --quiet SHA256SUMS) || { echo "dist/desktop/SHA256SUMS does not verify"; exit 1; }
+echo "dist/desktop checksums verified"
+ls -1 "$DIST" | grep "$VERSION"

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARES Terminal Console — Your account</title>
+<link rel="icon" href="/gw/logo.svg">
+<link rel="stylesheet" href="/gw/gw.css">
+<script src="/gw/common.js" defer></script>
+<script src="/gw/account.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="/gw/logo.svg" alt="">
+    <div><strong>ARES</strong><span>your account</span></div>
+  </div>
+  <div class="spacer"></div>
+  <span class="dim" id="me"></span>
+  <a href="/admin" id="admin-link" hidden><button type="button" tabindex="-1">Administration</button></a>
+  <a href="/"><button type="button" tabindex="-1">Open console</button></a>
+  <button type="button" id="signout">Sign out</button>
+</header>
+<main>
+  <div id="flash" class="msg"></div>
+
+  <section class="section" id="sec-profile">
+    <h2>Profile</h2>
+    <div class="grid2">
+      <div><label>Username</label><div id="p-user" class="mono"></div></div>
+      <div><label>Role</label><div id="p-role"></div></div>
+      <div><label>Signs in with</label><div id="p-source"></div></div>
+      <div><label>Last sign-in</label><div id="p-last"></div></div>
+    </div>
+  </section>
+
+  <section class="section" id="sec-password" hidden>
+    <h2>Password</h2>
+    <p class="dim">At least 12 characters, with three of: lowercase, uppercase, digits, symbols. Changing it signs out your other sessions.</p>
+    <form id="pw-form" autocomplete="off">
+      <div class="grid2">
+        <div><label for="pw-cur">Current password</label><input id="pw-cur" type="password" autocomplete="current-password" required></div>
+        <div></div>
+        <div><label for="pw-new">New password</label><input id="pw-new" type="password" autocomplete="new-password" required minlength="12"></div>
+        <div><label for="pw-new2">Repeat new password</label><input id="pw-new2" type="password" autocomplete="new-password" required minlength="12"></div>
+      </div>
+      <div class="btn-row"><button class="primary" type="submit">Change password</button></div>
+    </form>
+  </section>
+
+  <section class="section" id="sec-mfa">
+    <h2>Two-factor authentication</h2>
+    <p id="mfa-state" class="dim"></p>
+    <div id="mfa-off" hidden>
+      <button class="primary" type="button" id="mfa-start">Set up two-factor authentication</button>
+      <div id="mfa-setup" hidden>
+        <p class="dim">Scan the code with your authenticator app, or type the key in, then enter the 6-digit code it shows.</p>
+        <div id="mfa-qr" class="qr" hidden></div>
+        <label for="mfa-secret">Key</label>
+        <div class="copy-row"><input id="mfa-secret" class="mono" readonly><button type="button" data-copy="mfa-secret">Copy</button></div>
+        <form id="mfa-enable-form" autocomplete="off">
+          <label for="mfa-enable-code">Code from the app</label>
+          <input id="mfa-enable-code" class="code-input" inputmode="numeric" maxlength="6" pattern="\d{6}" required autocomplete="one-time-code">
+          <div class="btn-row"><button class="primary" type="submit">Turn on</button></div>
+        </form>
+      </div>
+    </div>
+    <div id="mfa-on" hidden>
+      <form id="mfa-code-form" autocomplete="off">
+        <label for="mfa-code">Current code (or a recovery code)</label>
+        <input id="mfa-code" class="code-input" maxlength="9" autocomplete="one-time-code">
+        <div class="btn-row">
+          <button type="button" id="mfa-recovery">New recovery codes</button>
+          <button type="button" class="danger" id="mfa-disable">Turn off</button>
+        </div>
+      </form>
+      <p class="hint" id="mfa-required-hint" hidden>Your administrator requires two-factor authentication for this account, so it cannot be turned off.</p>
+    </div>
+  </section>
+
+  <section class="section" id="sec-tokens">
+    <h2>API tokens</h2>
+    <p class="dim">A token lets a script use ARES Terminal Console as you, through <span class="mono">/api/v1/</span>
+      (see <span class="mono">/api/v1/openapi.json</span>). It never has more rights than your account, and it stops working
+      when you revoke it, when it expires, or when your account is disabled.</p>
+    <div class="grid2">
+      <div><label for="t-name">Name (what will use it)</label><input id="t-name" placeholder="nightly report script" autocomplete="off" maxlength="100"></div>
+      <div><label for="t-exp">Expires</label><select id="t-exp"></select></div>
+    </div>
+    <fieldset>
+      <legend>Scopes</legend>
+      <label class="check"><input type="checkbox" id="t-read" checked> <span><b>read</b>: look things up (GET)</span></label>
+      <label class="check"><input type="checkbox" id="t-write"> <span><b>write</b>: open and close terminals, change things</span></label>
+      <label class="check" id="t-admin-row" hidden><input type="checkbox" id="t-admin"> <span><b>admin</b>: administration endpoints (users, audit, settings, backup)</span></label>
+    </fieldset>
+    <p class="hint">Keep the token in a secret manager. Never put it in a URL, a committed script or a log.</p>
+    <div class="btn-row"><button class="primary" id="t-create" type="button">Create token</button></div>
+    <h2 style="margin-top:18px">Your tokens</h2>
+    <div class="table-wrap"><table id="t-list"></table></div>
+  </section>
+</main>
+
+<dialog id="d-once" aria-labelledby="so-title">
+  <h3 id="so-title"></h3>
+  <p class="dim" id="so-text"></p>
+  <div class="copy-row"><input id="so-value" readonly class="mono token-box"><button data-copy="so-value" type="button">Copy</button></div>
+  <pre class="mono detail" id="so-extra" hidden></pre>
+  <div class="row"><button class="primary" id="so-ok" type="button">I have saved it</button></div>
+</dialog>
+
+<dialog id="d-codes" aria-labelledby="dcodes-title">
+  <h3 id="dcodes-title">Your recovery codes</h3>
+  <p class="dim">Each code signs you in once if you lose your phone. They are shown only now.</p>
+  <div id="codes" class="codes"></div>
+  <div class="row"><button type="button" id="codes-copy">Copy</button><button type="button" id="codes-dl">Download</button><button class="primary" type="button" id="codes-ok">I have saved them</button></div>
+</dialog>
+
+<dialog id="d-confirm" aria-labelledby="dc-title">
+  <h3 id="dc-title">Are you sure?</h3>
+  <p id="dc-text" class="dim"></p>
+  <div class="row"><button id="dc-no" type="button">Cancel</button><button class="danger" id="dc-yes" type="button">Confirm</button></div>
+</dialog>
+</body>
+</html>

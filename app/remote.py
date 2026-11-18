@@ -168,7 +168,10 @@ class Runner:
         base = [self.target.get("ssh") or "ssh", "-T",
                 "-o", "BatchMode=yes", "-o", f"ConnectTimeout={CONNECT_TIMEOUT}",
                 "-o", "LogLevel=ERROR"]
-        opts = [o for o in self.target["options"] if o not in ("-t", "-tt")]
+        # A pane pinned to its own ControlPath carries ControlMaster=auto: a probe only ever uses
+        # an existing master, never becomes one.
+        opts = ["ControlMaster=no" if o == "ControlMaster=auto" else o
+                for o in self.target["options"] if o not in ("-t", "-tt")]
         if multiplexing() and not _has_own_multiplexing(opts):
             # ControlMaster=no: use the pane's master if it is up, otherwise
             # connect alone. Never become a master here -- a probe that did

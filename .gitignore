@@ -8,3 +8,17 @@ build/
 history.json
 .DS_Store
 node_modules/
+data/
+storage/
+logs/
+.env
+.env.deploy
+certs/
+.suite/
+release/
+.env.*
+!.env.example
+!.env.deploy.example
+*.key
+*.pem
+packaging/.build-hosts.env

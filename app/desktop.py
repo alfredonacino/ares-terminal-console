@@ -310,7 +310,7 @@ def run() -> int:
         return 1
 
     token = secrets.token_urlsafe(32)
-    httpd, url = server.start(host="127.0.0.1", port=0, data_dir=str(d), access_token=token)
+    httpd, url = server.start(host="127.0.0.1", port=0, data_dir=str(d), access_token=token, auth="local")
     port = httpd.server_address[1]
     fd = os.open(d / "instance.json", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
@@ -346,7 +346,7 @@ def self_test() -> int:
     in a real PTY (ConPTY on Windows) and its output comes back."""
     d = Path(tempfile.mkdtemp(prefix="ares-terminal-selftest-"))
     token = secrets.token_urlsafe(24)
-    httpd, url = server.start(host="127.0.0.1", port=0, data_dir=str(d), access_token=token)
+    httpd, url = server.start(host="127.0.0.1", port=0, data_dir=str(d), access_token=token, auth="local")
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{httpd.server_address[1]}"
     checks = []

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ares-terminal-console-api
+spec:
+  replicas: 1
+  strategy: { type: Recreate }   # the data volume is ReadWriteOnce
+  selector:
+    matchLabels: { app.kubernetes.io/component: server }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/component: server }
+    spec:
+      imagePullSecrets: [{ name: suite-registry }]
+      securityContext: { runAsNonRoot: true, fsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: server
+          image: ares-terminal-console            # replaced at deploy: <registry>/<suite>/ares-terminal-console:<version>
+          ports: [{ name: http, containerPort: 3222 }]
+          env:
+            - { name: PORT, value: "3222" }
+            - { name: HOST, value: "0.0.0.0" }
+            - { name: DATA_DIR, value: /app/data }
+            - { name: LOG_FORMAT, value: json }
+          envFrom:
+            - secretRef: { name: ares-terminal-console-env, optional: true }    # generated once by `suite deploy`
+            - configMapRef: { name: ares-terminal-console-config, optional: true }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          startupProbe:   { httpGet: { path: /healthz, port: http }, periodSeconds: 3, failureThreshold: 40 }
+          livenessProbe:  { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 20, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { memory: 1Gi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: data, mountPath: /app/data }]
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: ares-terminal-console-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ares-terminal-console-api
+spec:
+  selector: { app.kubernetes.io/component: server }
+  ports: [{ name: http, port: 3222, targetPort: http }]

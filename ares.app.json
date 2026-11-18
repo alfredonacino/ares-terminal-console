@@ -1,0 +1,90 @@
+{
+  "$schema": "https://ares-suite.nacino.net/schemas/app-manifest-1.json",
+  "suite": "ares",
+  "key": "ares-terminal-console",
+  "name": "ARES Terminal Console",
+  "description": "Split-pane terminals with tabs, broadcast, sessions that outlive the browser and a record of every connection and command, plus read-only server tools and an AI command assistant. Runs as a web application with user administration, two-factor authentication and single sign-on (Microsoft Entra ID, SAML 2.0, LDAP / Active Directory), and as a login-free desktop app for Linux, macOS and Windows. Backups to local, SFTP and S3, API tokens, audit log and SIEM forwarding.",
+  "category": "Operations",
+  "tags": [
+    "terminal",
+    "ssh",
+    "tmux",
+    "broadcast",
+    "sso",
+    "2fa",
+    "audit"
+  ],
+  "icon": "generic:terminal",
+  "stack": "python",
+  "components": {
+    "server": {
+      "enabled": true,
+      "port": 3222,
+      "health": "/healthz",
+      "entry": "app/main.py",
+      "maxReplicas": 1,
+      "install": "python3 -m venv .venv && .venv/bin/pip install -q --upgrade pip && .venv/bin/pip install -q -r requirements.txt"
+    },
+    "web": {
+      "enabled": true,
+      "mode": "proxy",
+      "staticDir": ""
+    },
+    "desktop": {
+      "enabled": true,
+      "packager": "pyinstaller",
+      "build": "./scripts/build-desktop.sh",
+      "targets": [
+        "deb",
+        "rpm",
+        "pkg.tar.zst",
+        "AppImage",
+        "tar.gz",
+        "nsis",
+        "msi",
+        "dmg",
+        "zip"
+      ]
+    }
+  },
+  "urls": {
+    "prod": "",
+    "pre": ""
+  },
+  "persistence": {
+    "enabled": true,
+    "size": "5Gi",
+    "mountPath": "/app/data"
+  },
+  "secrets": [
+    "APP_KEY:32:hex"
+  ],
+  "backup": {
+    "enabled": true
+  },
+  "api": {
+    "enabled": true,
+    "tokenPrefix": "ares"
+  },
+  "logging": {
+    "json": true,
+    "forwarding": true
+  },
+  "catalog": {
+    "isPublished": true,
+    "isPrivate": false
+  },
+  "git": {
+    "repo": ""
+  },
+  "brand": {
+    "tagline": "Split-pane terminals for operators: on the web with sign-in, 2FA and SSO, or on the desktop with nothing in the way.",
+    "primary": "#22d3ee",
+    "secondary": "#b14cff",
+    "dark": "#070b15",
+    "icon": "app/static/brand/ares-terminal-icon.svg",
+    "logoLight": "app/static/brand/ares-terminal-logo-light.svg",
+    "logoDark": "app/static/brand/ares-terminal-logo-dark.svg",
+    "author": "Alfredo Nacino"
+  }
+}

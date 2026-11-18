@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARES Terminal Console — Administration</title>
+<link rel="icon" href="/gw/logo.svg">
+<link rel="stylesheet" href="/gw/gw.css">
+<script src="/gw/common.js" defer></script>
+<script src="/gw/admin.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="/gw/logo.svg" alt="">
+    <div><strong>ARES</strong><span>administration</span></div>
+  </div>
+  <div class="spacer"></div>
+  <span class="dim" id="me"></span>
+  <a href="/account" id="account-link"><button type="button" tabindex="-1">Your account</button></a>
+  <a href="/"><button type="button" tabindex="-1">Open console</button></a>
+  <button type="button" id="signout">Sign out</button>
+</header>
+<nav class="tabs" role="tablist" id="tabs">
+  <button role="tab" data-tab="overview">Overview</button>
+  <button role="tab" data-tab="users" data-users-only>Users</button>
+  <button role="tab" data-tab="active" data-users-only>Active sessions</button>
+  <button role="tab" data-tab="terminals">Terminals</button>
+  <button role="tab" data-tab="audit">Audit &amp; Activity</button>
+  <button role="tab" data-tab="tokens">API tokens</button>
+  <button role="tab" data-tab="logging">Log forwarding</button>
+  <button role="tab" data-tab="backup">Backup &amp; Restore</button>
+  <button role="tab" data-tab="sso" data-users-only>Single sign-on</button>
+  <button role="tab" data-tab="policy" data-users-only>Policies</button>
+</nav>
+<main>
+  <div id="flash" class="msg"></div>
+
+  <section class="panel" id="p-overview" role="tabpanel">
+    <div class="cards" id="ov-cards"></div>
+    <p class="dim" id="ov-note"></p>
+  </section>
+
+  <section class="panel" id="p-users" role="tabpanel">
+    <div class="toolbar">
+      <div><label for="u-filter">Search</label><input id="u-filter" placeholder="name, email, role" autocomplete="off"></div>
+      <div class="spacer"></div>
+      <button class="primary" type="button" id="u-add">Add user</button>
+    </div>
+    <div class="table-wrap"><table id="u-list"></table></div>
+    <p class="hint">Accounts from Microsoft Entra ID, SAML and LDAP are created at their first sign-in when automatic provisioning is on.
+      Disabling a user, or changing their role, ends their sign-ins and closes their terminals.</p>
+  </section>
+
+  <section class="panel" id="p-active" role="tabpanel">
+    <div class="section"><h2>Signed in now</h2><p class="dim">Active in the last five minutes.</p>
+      <div class="table-wrap"><table id="a-now"></table></div></div>
+    <div class="section"><h2>Sign-in history</h2>
+      <div class="table-wrap"><table id="a-hist"></table></div></div>
+  </section>
+
+  <section class="panel" id="p-terminals" role="tabpanel">
+    <div class="toolbar"><div class="spacer"></div><button type="button" id="t-refresh">Refresh</button></div>
+    <div class="table-wrap"><table id="t-list"></table></div>
+  </section>
+
+  <section class="panel" id="p-audit" role="tabpanel">
+    <div class="seg" role="group" aria-label="Stream">
+      <button type="button" data-stream="audit" class="active">Audit <span class="dim">security events</span></button>
+      <button type="button" data-stream="activity">Activity <span class="dim">every change and API call</span></button>
+    </div>
+    <form class="toolbar" id="au-form">
+      <div><label for="au-since">From</label><input id="au-since" type="datetime-local"></div>
+      <div><label for="au-until">To</label><input id="au-until" type="datetime-local"></div>
+      <div><label for="au-user">User</label><input id="au-user" autocomplete="off"></div>
+      <div data-only="audit"><label for="au-cat">Category</label><select id="au-cat">
+        <option value="">any</option><option>auth</option><option>admin</option><option>api</option><option>terminal</option><option>system</option></select></div>
+      <div><label for="au-out">Outcome</label><select id="au-out"></select></div>
+      <div data-only="activity"><label for="au-method">Method</label><select id="au-method">
+        <option value="">any</option><option>POST</option><option>PUT</option><option>DELETE</option><option>GET</option></select></div>
+      <div><label for="au-path">Path / object</label><input id="au-path" autocomplete="off"></div>
+      <div><label for="au-q">Text</label><input id="au-q" autocomplete="off"></div>
+      <button class="primary" type="submit">Apply</button>
+      <div class="spacer"></div>
+      <a id="au-csv" download><button type="button" tabindex="-1">Export CSV</button></a>
+      <a id="au-json" download><button type="button" tabindex="-1">Export JSON</button></a>
+    </form>
+    <div class="table-wrap"><table id="au-list"></table></div>
+    <div class="btn-row"><button type="button" id="au-more" hidden>Load older</button></div>
+    <p class="hint">The log is append-only: entries are never edited or deleted, only removed by the retention policy. Exports hold at most 5,000 rows.</p>
+  </section>
+
+  <section class="panel" id="p-tokens" role="tabpanel">
+    <div class="toolbar"><p class="dim" style="margin:0">Every API token. Each token acts as its owner, never with more rights.</p>
+      <div class="spacer"></div><button class="primary" type="button" id="k-add">Create token</button></div>
+    <div class="table-wrap"><table id="k-list"></table></div>
+  </section>
+
+  <section class="panel" id="p-logging" role="tabpanel">
+    <div class="section"><h2>JSON logs</h2><p class="dim" id="lg-info"></p></div>
+    <div class="toolbar"><div class="spacer"></div>
+      <button type="button" id="lg-add-syslog">Add syslog destination</button>
+      <button type="button" class="primary" id="lg-add-http">Add HTTP(S) destination</button></div>
+    <div class="table-wrap"><table id="lg-list"></table></div>
+    <p class="hint">Audit and activity events are delivered at least once: after an outage, forwarding catches up from the database.
+      Application events use a bounded queue; when it is full they are dropped and counted.</p>
+  </section>
+
+  <section class="panel" id="p-backup" role="tabpanel">
+    <div class="cards" id="bk-cards"></div>
+    <div id="bk-pending" class="msg info"></div>
+    <div class="grid2">
+      <div class="section">
+        <h2>Passphrase</h2>
+        <p class="dim">Backups are encrypted with AES-256-GCM using this passphrase. It is never stored inside a backup: keep a copy
+          somewhere safe, offline. SFTP and S3 destinations need it.</p>
+        <form id="bk-pass-form" autocomplete="off">
+          <label for="bk-pass">New passphrase</label><input id="bk-pass" type="password" autocomplete="new-password">
+          <label for="bk-pass2">Repeat it</label><input id="bk-pass2" type="password" autocomplete="new-password">
+          <div class="btn-row"><button class="primary" type="submit">Save passphrase</button>
+            <button type="button" class="danger" id="bk-pass-remove">Remove</button></div>
+        </form>
+      </div>
+      <div class="section">
+        <h2>Schedule</h2>
+        <form id="bk-sched-form">
+          <label for="bk-mode">When</label>
+          <select id="bk-mode"><option value="off">Off</option><option value="hourly">Every hour</option>
+            <option value="every">Every N hours</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
+          <div data-sched="every"><label for="bk-hours">Every (hours)</label><input id="bk-hours" type="number" min="1" max="24"></div>
+          <div data-sched="weekly"><label for="bk-weekday">Day</label><select id="bk-weekday">
+            <option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option>
+            <option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select></div>
+          <div data-sched="daily weekly"><label for="bk-time">Time (server time, <span id="bk-tz"></span>)</label><input id="bk-time" type="time"></div>
+          <div class="btn-row"><button class="primary" type="submit">Save schedule</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="section">
+      <h2>Destinations</h2>
+      <div class="toolbar">
+        <button class="primary" type="button" id="bk-run">Back up now</button>
+        <button type="button" id="bk-prune">Apply retention now</button>
+        <div class="spacer"></div>
+        <button type="button" id="bk-add-sftp">Add SFTP</button>
+        <button type="button" id="bk-add-s3">Add S3-compatible</button>
+      </div>
+      <div class="table-wrap"><table id="bk-dests"></table></div>
+      <p class="hint">Retention is in days per destination (0 keeps everything). The newest backup is always kept.</p>
+    </div>
+    <div class="section" id="bk-files-sec" hidden>
+      <h2 id="bk-files-title">Backups</h2>
+      <div class="table-wrap"><table id="bk-files"></table></div>
+    </div>
+    <div class="section">
+      <h2>Restore from a file</h2>
+      <p class="dim">Upload a <span class="mono">ares-terminal-console-backup-…tar.gz[.enc]</span> archive. It is checked (checksums, application,
+        version), a safety backup of the current state is taken, and the server restarts to apply it. Everyone is signed out.</p>
+      <div class="grid2">
+        <div><label for="rs-file">Archive</label><input id="rs-file" type="file" accept=".gz,.enc"></div>
+        <div><label for="rs-pass">Its passphrase (when encrypted)</label><input id="rs-pass" type="password" autocomplete="off"></div>
+      </div>
+      <div class="btn-row"><button class="danger" type="button" id="rs-go">Upload and restore</button></div>
+    </div>
+    <div class="section">
+      <h2>Recent runs</h2>
+      <div class="table-wrap"><table id="bk-hist"></table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-sso" role="tabpanel">
+    <div class="section">
+      <h2>Microsoft Entra ID / OpenID Connect</h2>
+      <p class="dim">In Entra: App registrations → New registration, platform <b>Web</b>, with this redirect URI. Create a client secret,
+        and for group-based roles add the <span class="mono">groups</span> claim (Token configuration) and list the group object IDs below.</p>
+      <label>Redirect URI</label>
+      <div class="copy-row"><input id="oidc-redirect" readonly class="mono"><button type="button" data-copy="oidc-redirect">Copy</button></div>
+      <div id="oidc-form"></div>
+      <div class="btn-row"><button class="primary" type="button" id="oidc-save">Save</button><button type="button" id="oidc-test">Test connection</button></div>
+    </div>
+    <div class="section">
+      <h2>SAML 2.0</h2>
+      <p class="dim">Give your identity provider these service provider values (or the metadata URL), then load the IdP's federation metadata.</p>
+      <div class="grid2">
+        <div><label>Entity ID (identifier)</label><div class="copy-row"><input id="sp-entity" readonly class="mono"><button type="button" data-copy="sp-entity">Copy</button></div></div>
+        <div><label>Reply URL (ACS)</label><div class="copy-row"><input id="sp-acs" readonly class="mono"><button type="button" data-copy="sp-acs">Copy</button></div></div>
+        <div><label>SP metadata</label><div class="copy-row"><input id="sp-meta" readonly class="mono"><button type="button" data-copy="sp-meta">Copy</button></div></div>
+        <div><label>Sign-on URL</label><div class="copy-row"><input id="sp-signon" readonly class="mono"><button type="button" data-copy="sp-signon">Copy</button></div></div>
+      </div>
+      <fieldset>
+        <legend>Load from IdP metadata</legend>
+        <label for="saml-md-url">Federation metadata URL</label>
+        <div class="copy-row"><input id="saml-md-url" class="mono" placeholder="https://login.microsoftonline.com/…/federationmetadata.xml"><button type="button" id="saml-md-load">Load</button></div>
+        <label for="saml-md-xml">…or paste the metadata XML</label>
+        <textarea id="saml-md-xml"></textarea>
+        <div class="btn-row"><button type="button" id="saml-md-parse">Load from XML</button></div>
+      </fieldset>
+      <div id="saml-form"></div>
+      <div class="btn-row"><button class="primary" type="button" id="saml-save">Save</button></div>
+    </div>
+    <div class="section">
+      <h2>LDAP / Active Directory</h2>
+      <p class="dim">Directory users sign in on the normal form with their directory username and password. Use <span class="mono">ldaps://</span>
+        (or StartTLS); the service account only needs to read users and groups.</p>
+      <div id="ldap-form"></div>
+      <div class="btn-row"><button class="primary" type="button" id="ldap-save">Save</button></div>
+      <fieldset>
+        <legend>Test</legend>
+        <div class="grid2">
+          <div><label for="ldap-t-user">Username (optional)</label><input id="ldap-t-user" autocomplete="off"></div>
+          <div><label for="ldap-t-pass">Password</label><input id="ldap-t-pass" type="password" autocomplete="off"></div>
+        </div>
+        <div class="btn-row"><button type="button" id="ldap-test">Test connection</button></div>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="panel" id="p-policy" role="tabpanel">
+    <div class="section">
+      <h2>Policies</h2>
+      <div id="pol-form"></div>
+      <p class="hint"><b>Who may open a shell on this server:</b> every terminal runs as the server's service account. Users without this right can
+        open only <span class="mono">ssh user@host</span> connections, pinned to their own ssh settings and known hosts, with no agent,
+        port forwarding, proxy commands or local commands: they reach only what they can log in to themselves.</p>
+      <div class="btn-row"><button class="primary" type="button" id="pol-save">Save policies</button></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="d-form" aria-labelledby="df-title">
+  <h3 id="df-title"></h3>
+  <p class="dim" id="df-text"></p>
+  <div id="df-msg" class="msg err" role="alert"></div>
+  <form id="df-form" method="dialog"><div id="df-body"></div>
+    <div class="row"><button id="df-no" type="button">Cancel</button><button class="primary" id="df-yes" type="submit">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="d-once" aria-labelledby="so-title">
+  <h3 id="so-title"></h3>
+  <p class="dim" id="so-text"></p>
+  <div class="copy-row"><input id="so-value" readonly class="mono token-box"><button data-copy="so-value" type="button">Copy</button></div>
+  <pre class="mono detail" id="so-extra" hidden></pre>
+  <div class="row"><button class="primary" id="so-ok" type="button">Done</button></div>
+</dialog>
+
+<dialog id="d-confirm" aria-labelledby="dc-title">
+  <h3 id="dc-title">Are you sure?</h3>
+  <p id="dc-text" class="dim"></p>
+  <div class="row"><button id="dc-no" type="button">Cancel</button><button class="danger" id="dc-yes" type="button">Confirm</button></div>
+</dialog>
+
+<div class="restarting" id="restarting" hidden><div role="status"><h3>Restoring…</h3>
+  <p class="dim" id="restarting-text">The server is restarting to apply the backup. This page reloads when it is back.</p></div></div>
+</body>
+</html>

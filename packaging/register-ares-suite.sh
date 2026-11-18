@@ -45,8 +45,9 @@ print(json.dumps({
     "description": (
         f"Split-pane terminal for server work (v{version}): tabs, broadcast, sessions that "
         "survive a closed window, and a record of every connection and command. Seven "
-        "read-only server tools on any SSH pane (health, performance, logs, AI log analysis, "
-        "packages, vulnerability scan, history) and an AI assistant that suggests commands "
+        "read-only tools for the server or this computer, in a floating card on the pane you "
+        "work in that folds away (health, performance, logs, AI log analysis, packages, "
+        "vulnerability scan, history), and an AI assistant that suggests commands "
         "but never runs them. Desktop app for Linux, macOS and Windows, Docker image, "
         "ApexBuild module. Downloads on ARES Repository."
     ),

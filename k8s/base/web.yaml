@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ares-terminal-console-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/component: web }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/component: web }
+    spec:
+      imagePullSecrets: [{ name: suite-registry }]
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: web
+          image: ares-terminal-console-web        # replaced at deploy: <registry>/<suite>/ares-terminal-console-web:<version>
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: API_UPSTREAM, value: "http://ares-terminal-console-api:3222" }
+          readinessProbe: { httpGet: { path: /nginx-health, port: http }, periodSeconds: 10 }
+          livenessProbe:  { httpGet: { path: /nginx-health, port: http }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits:   { memory: 128Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ares-terminal-console-web
+spec:
+  selector: { app.kubernetes.io/component: web }
+  ports: [{ name: http, port: 80, targetPort: http }]

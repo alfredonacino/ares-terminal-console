@@ -1,56 +1,44 @@
 #!/bin/sh
-# Build, check and push the ARES Terminal Console image.
+# Build the ARES Terminal Console server image and check it before it is pushed.
 #
-#   packaging/docker/docker-push.sh                 # VERSION and latest to $REGISTRY
-#   REGISTRY=other.example packaging/docker/docker-push.sh
-#   packaging/docker/docker-push.sh --no-push       # build and check only
+#   packaging/docker/docker-push.sh            # build + check, then push with the suite tooling
+#   packaging/docker/docker-push.sh --no-push  # build + check only
 #
-# The check runs the image, waits for its health endpoint, confirms the token
-# gate refuses a request without it, and opens a shell through the API.
+# Pushing (server and web images, <version> and latest, OCI labels, registry login) is
+# `suite docker push`; this script only adds the smoke test: the image starts, answers
+# /healthz, refuses the API without a sign-in, and created the first administrator.
 set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-REGISTRY="${REGISTRY:-docker.cybercontrol.tech}"
-IMAGE="$REGISTRY/ares/terminal-console"
-VERSION=$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "$ROOT/apexmodule.toml")
+VERSION=$(cat "$ROOT/VERSION")
+IMAGE="ares-terminal-console-check:$VERSION"
 PUSH=1; [ "${1:-}" = "--no-push" ] && PUSH=0
 
-echo "==> building $IMAGE:$VERSION"
-docker build -q --build-arg VERSION="$VERSION" -t "$IMAGE:$VERSION" -t "$IMAGE:latest" "$ROOT"
+echo "==> building $IMAGE"
+docker build -q --build-arg APP_VERSION="$VERSION" -t "$IMAGE" "$ROOT" >/dev/null
 
 echo "==> checking the image"
 NAME="ares-terminal-check-$$"
-docker run -d --rm --name "$NAME" -e ARES_ACCESS_TOKEN=check-token-0123456789abcdef "$IMAGE:$VERSION" >/dev/null
+docker run -d --rm --name "$NAME" "$IMAGE" >/dev/null
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
 docker exec -i "$NAME" python - <<'PY'
-import json, time, urllib.request, urllib.error
-base = "http://127.0.0.1:8080"
-for _ in range(50):
+import json, os, time, urllib.request, urllib.error
+base = "http://127.0.0.1:" + os.environ.get("PORT", "3222")
+for _ in range(60):
     try:
-        h = json.load(urllib.request.urlopen(base + "/api/health", timeout=2)); break
+        h = json.load(urllib.request.urlopen(base + "/healthz", timeout=2)); break
     except OSError:
-        time.sleep(0.2)
+        time.sleep(0.5)
 else:
-    raise SystemExit("FAIL  the health endpoint never answered")
-checks = [("health answers " + h["app"] + " " + h["version"], h["ok"]), ("a pty is available", h["supported"])]
+    raise SystemExit("FAIL /healthz never answered")
+print("PASS /healthz", h)
 try:
-    urllib.request.urlopen(base + "/api/sessions", timeout=5); refused = False
+    urllib.request.urlopen(base + "/api/sessions", timeout=5)
+    raise SystemExit("FAIL /api/sessions answered without a sign-in")
 except urllib.error.HTTPError as e:
-    refused = e.code == 401
-checks.append(("the API refuses a request without the token", refused))
-cookie = {"Cookie": "ares_terminal_console=check-token-0123456789abcdef", "Content-Type": "application/json"}
-req = urllib.request.Request(base + "/api/sessions", method="POST", headers=cookie,
-                             data=json.dumps({"command": "/bin/sh -c 'echo ok'"}).encode())
-s = json.load(urllib.request.urlopen(req, timeout=10))
-checks.append(("a shell opens with the token", s.get("ok") is True))
-for name, ok in checks:
-    print(("PASS  " if ok else "FAIL  ") + name)
-print(f"{sum(ok for _, ok in checks)}/{len(checks)} checks passed")
-raise SystemExit(0 if all(ok for _, ok in checks) else 1)
+    assert e.code in (401, 403), e.code
+    print("PASS /api/sessions refused without a sign-in:", e.code)
+assert os.path.exists("/app/data/initial-admin-password.txt"), "no initial admin password file"
+print("PASS first administrator created (one-time password file present)")
 PY
-
-if [ "$PUSH" = 1 ]; then
-  echo "==> pushing"
-  docker push -q "$IMAGE:$VERSION"
-  docker push -q "$IMAGE:latest"
-  echo "digest: $(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$VERSION")"
-fi
+[ "$PUSH" = 1 ] && (cd "$ROOT" && suite docker push)
+echo "==> ok"

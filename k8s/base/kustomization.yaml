@@ -1,0 +1,15 @@
+# ARES Suite standard Kubernetes base for ares-terminal-console.
+# Committed manifests carry NO namespace, registry host, node or hostname:
+# `suite deploy <env>` renders .suite/render/<env>/ on top of overlays/<env> and
+# injects namespace, image registry + tag, replicas, ingress host, storage class
+# and - where the server runs on pm2 app servers - a selector-less ares-terminal-console-api Service.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: ares-terminal-console
+resources:
+  - api.yaml
+  - web.yaml
+  - pvc.yaml

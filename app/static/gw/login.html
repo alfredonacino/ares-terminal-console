@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARES Terminal Console — Sign in</title>
+<link rel="icon" href="/gw/logo.svg">
+<link rel="stylesheet" href="/gw/gw.css">
+<script src="/gw/login.js" defer></script>
+</head>
+<body>
+<div class="auth-wrap">
+  <main class="auth-card">
+    <div class="brand">
+      <img src="/gw/logo.svg" alt="">
+      <div><strong>ARES</strong><span>terminal console</span></div>
+    </div>
+
+    <!-- 1. sign in -->
+    <section id="signin" hidden>
+      <h1>Sign in</h1>
+      <div id="msg" class="msg err" role="alert"></div>
+      <div id="sso-block" hidden>
+        <button id="oidc-btn" class="full sso-btn primary" type="button" hidden>
+          <svg viewBox="0 0 21 21" aria-hidden="true"><rect width="10" height="10" fill="#f25022"/><rect x="11" width="10" height="10" fill="#7fba00"/><rect y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>
+          <span id="oidc-label">Sign in with Microsoft</span>
+        </button>
+        <button id="saml-btn" class="full sso-btn" type="button" hidden><span id="saml-label">Sign in with SAML</span></button>
+        <div class="divider">or with a username and password</div>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="full primary" id="login-btn" type="submit">Sign in</button>
+      </form>
+      <p class="hint" id="ldap-hint" hidden>Directory (LDAP / Active Directory) accounts sign in here with their usual username and password.</p>
+      <p class="hint" id="admins-only" hidden>Password sign-in for local accounts is limited to administrators.</p>
+      <p class="hint" id="fresh-hint" hidden>New installation: sign in as <span class="mono">aresadmin</span> with the one-time
+        password in <span class="mono">initial-admin-password.txt</span> in the data directory (DATA_DIR). After choosing a new
+        password and setting up two-factor authentication you can restore an earlier installation from
+        <b>Administration → Backup &amp; Restore</b>.</p>
+    </section>
+
+    <!-- 2. two-factor code -->
+    <section id="mfa" hidden>
+      <h1>Two-factor authentication</h1>
+      <p class="hint">Enter the 6-digit code from your authenticator app, or one of your recovery codes (xxxx-xxxx).</p>
+      <div id="mmsg" class="msg err" role="alert"></div>
+      <form id="mfa-form" autocomplete="off">
+        <label for="mfa-code">Code</label>
+        <input id="mfa-code" class="code-input" inputmode="text" autocomplete="one-time-code" required maxlength="9" pattern="(\d{6}|[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})">
+        <button class="full primary" type="submit">Verify</button>
+      </form>
+      <p class="hint"><button class="link signout" type="button">Cancel and sign out</button></p>
+    </section>
+
+    <!-- 3. forced password change -->
+    <section id="change" hidden>
+      <h1>Choose a new password</h1>
+      <p class="hint">Your password must be changed before you continue. At least 12 characters,
+        with three of: lowercase, uppercase, digits, symbols.</p>
+      <div id="cmsg" class="msg err" role="alert"></div>
+      <form id="change-form" autocomplete="off">
+        <label for="current">Current password</label>
+        <input id="current" type="password" autocomplete="current-password" required>
+        <label for="new1">New password</label>
+        <input id="new1" type="password" autocomplete="new-password" required minlength="12">
+        <label for="new2">Repeat new password</label>
+        <input id="new2" type="password" autocomplete="new-password" required minlength="12">
+        <button class="full primary" type="submit">Change password and continue</button>
+      </form>
+      <p class="hint"><button class="link signout" type="button">Sign out</button></p>
+    </section>
+
+    <!-- 4. two-factor enrolment -->
+    <section id="enroll" hidden>
+      <h1>Set up two-factor authentication</h1>
+      <p class="hint">Your administrator requires it. Scan the code with an authenticator app (Microsoft Authenticator,
+        Google Authenticator, 1Password, Authy, FreeOTP…), or type the key in, then enter the 6-digit code it shows.</p>
+      <div id="emsg" class="msg err" role="alert"></div>
+      <div id="qr" class="qr" hidden></div>
+      <label for="secret">Key</label>
+      <div class="copy-row"><input id="secret" class="mono" readonly><button type="button" id="copy-secret">Copy</button></div>
+      <form id="enroll-form" autocomplete="off">
+        <label for="enroll-code">Code from the app</label>
+        <input id="enroll-code" class="code-input" inputmode="numeric" autocomplete="one-time-code" required maxlength="6" pattern="\d{6}">
+        <button class="full primary" type="submit">Turn on two-factor authentication</button>
+      </form>
+      <p class="hint"><button class="link signout" type="button">Sign out</button></p>
+    </section>
+
+    <!-- 5. recovery codes -->
+    <section id="recovery" hidden>
+      <h1>Save your recovery codes</h1>
+      <p class="hint">Each code signs you in once if you lose your phone. They are shown only now: keep them somewhere safe,
+        away from this computer.</p>
+      <div id="codes" class="codes"></div>
+      <div class="btn-row">
+        <button type="button" id="copy-codes">Copy</button>
+        <button type="button" id="dl-codes">Download</button>
+      </div>
+      <button class="full primary" type="button" id="codes-done">I have saved them, continue</button>
+    </section>
+
+    <div class="foot">ARES Terminal Console <span id="ver"></span> · Access is logged.</div>
+  </main>
+</div>
+</body>
+</html>

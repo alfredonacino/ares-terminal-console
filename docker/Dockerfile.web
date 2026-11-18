@@ -1,0 +1,18 @@
+# ARES Suite standard web tier: ares-terminal-console-web
+# web.mode "proxy": the server renders its own UI, so nginx only forwards to API_UPSTREAM
+# (HTTP and the terminals' WebSockets). In production that is the in-cluster
+# ares-terminal-console-api Service; in preproduction the same Service name points at the
+# pm2 app server(s). The image is identical in every environment and carries no secrets.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
+ARG APP_VERSION=0.0.0
+LABEL org.opencontainers.image.title="ARES Terminal Console (web tier)" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.vendor="ARES" \
+      org.opencontainers.image.licenses="MIT"
+ENV API_UPSTREAM=http://ares-terminal-console-api:3222
+USER root
+RUN rm -rf /usr/share/nginx/html/*
+USER 101
+COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://127.0.0.1:8080/nginx-health >/dev/null || exit 1

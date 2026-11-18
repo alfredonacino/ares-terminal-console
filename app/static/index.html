@@ -59,6 +59,12 @@
       <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.4V8l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
     </button>
     <div class="conn off" id="connDot" title="Link to the backend"><i></i><span id="connText">…</span></div>
+    <!-- Filled by session.js: who is signed in (web edition), Administration, Sign out. -->
+    <div class="usermenu" id="userMenu" hidden>
+      <a class="btn" id="lnkAdmin" href="/admin" hidden title="Administration: users, audit, backup">Admin</a>
+      <a class="btn user" id="lnkAccount" href="/account" hidden title="Your account: password, 2FA, API tokens"></a>
+      <button class="btn" id="btnSignOut" hidden title="Sign out">Sign out</button>
+    </div>
   </div>
 </header>
 
@@ -314,6 +320,7 @@
 </div>
 <script src="vendor/xterm/xterm.min.js"></script>
 <script src="vendor/xterm/xterm-addon-fit.min.js"></script>
+<script src="session.js"></script>
 <script src="app.js"></script>
 <script src="insight.js"></script>
 </body>

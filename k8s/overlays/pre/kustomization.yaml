@@ -1,0 +1,25 @@
+# pre overlay for ares-terminal-console: environment-specific tuning only (resources, config, extra
+# objects). Placement, hosts, registry and replicas come from infrastructure.json
+# at deploy time - do not add them here.
+# In pre the server runs on the pm2 app server(s) (ARES_ENVIRONMENT comes from its .env), and
+# `suite deploy pre` drops this Deployment; the patch is kept so the two overlays stay symmetrical.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - target:
+      kind: Deployment
+      name: ares-terminal-console-api
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ares-terminal-console-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: server
+                env:
+                  - { name: ARES_ENVIRONMENT, value: pre }

@@ -1,0 +1,24 @@
+# ARES Suite Linux packages for ares-terminal-console (nfpm): deb, rpm, archlinux (.pkg.tar.zst).
+# scripts/build-desktop.sh builds the binary into dist/desktop/bin first.
+name: ares-terminal-console
+arch: amd64
+platform: linux
+version: ${APP_VERSION}
+release: 1
+section: utils
+maintainer: ARES
+description: ARES Terminal Console (ARES Suite)
+vendor: ARES
+homepage: https://ares-terminal-console.nacino.net
+license: Proprietary
+contents:
+  - src: dist/desktop/bin/ares-terminal-console
+    dst: /opt/ares-terminal-console/ares-terminal-console
+    file_info: { mode: 0755 }
+  - src: /opt/ares-terminal-console/ares-terminal-console
+    dst: /usr/bin/ares-terminal-console
+    type: symlink
+  - src: packaging/ares-terminal-console.desktop
+    dst: /usr/share/applications/ares-terminal-console.desktop
+  - src: build/icon.png
+    dst: /usr/share/icons/hicolor/512x512/apps/ares-terminal-console.png

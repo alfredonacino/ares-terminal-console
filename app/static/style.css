@@ -843,3 +843,10 @@ details.srv-row { display: block; padding: 0; }
   .bar-tools::-webkit-scrollbar { display: none; }
   .srv-row > summary { flex-wrap: wrap; }
 }
+
+/* ── web edition: who is signed in ───────────────────────────────────────── */
+.usermenu { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
+.usermenu[hidden], .usermenu [hidden] { display: none !important; }
+.usermenu a.btn { text-decoration: none; }
+.usermenu .user { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .usermenu .user { max-width: 9ch; } }

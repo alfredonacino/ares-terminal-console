@@ -1,0 +1,65 @@
+# ARES Suite standard: desktop installers for every OS, built on a v* tag.
+# Installers are kept as workflow artifacts. They are NOT pushed to the ARES Repository
+# from CI: the Ed25519 publisher key never leaves the release machine. There,
+#   suite build desktop --from-ci latest && suite publish
+# downloads, checksums, signs and uploads them.
+#
+# Each job runs scripts/build-desktop.sh, which drives packaging/build.py (PyInstaller, frozen
+# self-test) for its own OS. PyInstaller does not cross-compile, hence one runner per OS/arch.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, label: linux-x86_64 }    # freeze in a Debian 11 container (old glibc)
+          - { os: windows-2022, label: windows-x86_64 }
+          - { os: macos-14,     label: macos-arm64 }
+          - { os: macos-13,     label: macos-x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: Windows packaging tools (Inno Setup 6, WiX 5)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          dotnet tool install --global wix --version 5.0.2
+          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Build installers
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"     # code signing is opt-in (STANDARD.md §5)
+        run: |
+          set -euo pipefail
+          export APP_VERSION="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || export APP_VERSION="$(cat VERSION)"
+          [ "$APP_VERSION" = "$(cat VERSION)" ] || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+          python -m pip install -q --upgrade pip
+          ./scripts/build-desktop.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.label }}
+          if-no-files-found: error
+          path: |
+            dist/desktop/*.AppImage
+            dist/desktop/*.deb
+            dist/desktop/*.rpm
+            dist/desktop/*.pkg.tar.zst
+            dist/desktop/*.tar.gz
+            dist/desktop/*.exe
+            dist/desktop/*.msi
+            dist/desktop/*.dmg
+            dist/desktop/*.zip
+            dist/desktop/SHA256SUMS

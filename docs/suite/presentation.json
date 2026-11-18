@@ -1,0 +1,104 @@
+{
+  "title": "ARES Terminal Console",
+  "tagline": "Split-pane terminals for operators: on the web with sign-in, 2FA and SSO, or on the desktop with nothing in the way.",
+  "slides": [
+    {
+      "type": "title",
+      "section": "Introduction",
+      "accentWord": 1,
+      "notes": "ARES Terminal Console is the terminal of the ARES Suite. Version 2.4 turns it from a personal desktop tool into a shared web application for the team, without taking anything away from the desktop app."
+    },
+    {
+      "type": "rows",
+      "section": "The problem",
+      "eyebrow": "Why it matters",
+      "title": "Operators work in many terminals at once",
+      "items": [
+        "A change touches **several servers at the same time**, and every one needs the same command.",
+        "A dropped laptop lid or Wi-Fi **kills the session** and the work in it.",
+        "Nobody can say afterwards **which command ran on which server, by whom**.",
+        "A shared jump box with one account gives **no identity, no 2FA and no audit**."
+      ],
+      "notes": "These are the daily frictions of operations work, and the last one is the security gap a shared web terminal must close."
+    },
+    {
+      "type": "cards",
+      "section": "The solution",
+      "eyebrow": "What it does",
+      "title": "One console for every terminal",
+      "items": [
+        ["▦", "Splits and tabs", "Panes side by side, one tab per connection, broadcast typing to all of them."],
+        ["↻", "Sessions that last", "Close the tab or lose the network: the command keeps running and the scrollback replays."],
+        ["☰", "A record", "Every SSH destination and command line, searchable; secrets never recorded."],
+        ["◈", "Server tools", "Health, performance, logs, AI log analysis, packages and CVEs, read-only."]
+      ],
+      "notes": "The features operators already use on the desktop are the same in the browser."
+    },
+    {
+      "type": "cards",
+      "section": "Web edition",
+      "eyebrow": "New in 2.4",
+      "title": "A web application built for a team",
+      "items": [
+        ["👤", "Users and roles", "Administrators and users; the first administrator is aresadmin."],
+        ["🔐", "Two-factor", "TOTP with recovery codes, required for everyone by default."],
+        ["🔑", "Single sign-on", "Microsoft Entra ID, SAML 2.0 and LDAP / Active Directory, with group-based roles."],
+        ["🧱", "Isolation", "Each user's terminals and history are their own; server shells only for admins."]
+      ],
+      "notes": "The desktop app stays login-free: it is one person's terminal on their own computer."
+    },
+    {
+      "type": "diagram",
+      "eyebrow": "How it runs",
+      "title": "One codebase, three hosts",
+      "mermaid": "flowchart LR\n  B[Browser] --> W[nginx web tier]\n  W --> S[Server: users mode]\n  S --> D[(SQLite + user data)]\n  DW[Desktop window] --> L[Server: local mode]",
+      "caption": "Web edition in prod and pre; desktop app on loopback",
+      "notes": "Production runs both tiers on Kubernetes; the demo runs the server under pm2. The desktop app runs the same server locally."
+    },
+    {
+      "type": "table",
+      "section": "Operations",
+      "eyebrow": "Built to the Suite standard",
+      "title": "Ready to run in production",
+      "leftWidth": 3.4,
+      "rows": [
+        ["Backup & Restore", "Encrypted archives to local, SFTP and S3, scheduled with retention; restore from the page or CLI"],
+        ["API", "Every function under /api/v1 with scoped, expiring, revocable tokens"],
+        ["Audit & Activity", "Append-only log of sign-ins, changes, terminals and commands, with CSV / JSON export"],
+        ["SIEM", "ECS JSON logs forwarded to Splunk, Elastic, Graylog, Loki, Wazuh or Sentinel"],
+        ["Environments", "prod: ares-terminal-console.nacino.net · pre: ares-terminal-console-demo.nacino.net"]
+      ],
+      "notes": "Everything the Suite standard asks for is in this release."
+    },
+    {
+      "type": "stats",
+      "eyebrow": "Where it runs",
+      "title": "Every platform",
+      "items": [
+        ["Web", "Browser, prod and pre"],
+        ["5", "Linux packages: deb, rpm, Arch, AppImage, tar.gz"],
+        ["3", "Windows: setup.exe, MSI, zip"],
+        ["2", "macOS: Apple silicon and Intel"]
+      ],
+      "notes": "One tag builds every installer; they are signed and published through the ARES Repository."
+    },
+    {
+      "type": "steps",
+      "section": "Next steps",
+      "eyebrow": "Next steps",
+      "title": "What comes next",
+      "items": [
+        ["Connect Entra ID", " for the team and enrol 2FA for aresadmin."],
+        ["Configure an S3 backup", " as the off-cluster copy in prod."],
+        ["Forward audit events", " to the SIEM and alert on failed sign-ins."]
+      ],
+      "notes": "Three configuration steps after the first deploy, all in the Admin pages."
+    },
+    {
+      "type": "closing",
+      "title": "Every terminal. Every server. One record.",
+      "lead": "ARES Terminal Console: the operator's console of the ARES Suite.",
+      "notes": "Questions. The demo is open for anyone who wants to try it."
+    }
+  ]
+}

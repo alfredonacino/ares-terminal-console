@@ -245,9 +245,12 @@ class Pane {
       else if (msg.t === "exit") this.onExit(msg.code);
     };
     ws.onerror = () => setConn(false);
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.ws = null;
       if (this.dead || this.closing) return;
+      // Signed out (here, elsewhere, or by an administrator): to the sign-in page, not a retry loop.
+      if (ev && ev.code === 4401) { window.aresSignedOut && window.aresSignedOut(); return; }
+      if (window.aresAuthCheck) window.aresAuthCheck();
       // The session is still alive on the backend; this socket is not. Getting
       // back to it is the whole reason sessions outlive sockets, so retry --
       // backing off, because a server that is down stays down for a while.

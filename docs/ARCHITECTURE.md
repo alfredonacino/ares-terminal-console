@@ -1,11 +1,12 @@
 # ARES Terminal Console: Architecture
 
-Version 2.3.0 · 16 November 2026 · Authored by Alfredo Nacino · Part of the ARES Application Suite
+Version 2.4.0 · 18 November 2026 · Authored by Alfredo Nacino · Part of the ARES Application Suite
 
 | Where | Address |
 |---|---|
 | **Downloads (signed)** | https://aresrepo.cybercontrol.tech |
-| **Docker image** | `docker.cybercontrol.tech/ares/terminal-console` |
+| **Web edition** | https://ares-terminal-console.nacino.net (`prod`), https://ares-terminal-console-demo.nacino.net (`pre`) |
+| **Docker images** | `docker.cybercontrol.tech/ares/ares-terminal-console` (server), `…/ares-terminal-console-web` (nginx) |
 | **Listed on** | https://ares-suite.nacino.net |
 
 The drawn blueprint (diagrams of every section below) is `docs/blueprint.html`.
@@ -16,7 +17,8 @@ Related documents: [Executive Summary](EXECUTIVE-SUMMARY.md) · [Executive Prese
 
 | Goal | What it means in the design |
 |---|---|
-| **Opens on a broken machine** | The server is Python standard library only. No pip install, no Node, no build step, no network. The one optional dependency (`claude-agent-sdk`) is imported lazily and costs one feature when absent. |
+| **Opens on a broken machine** | The local mode is Python standard library only. No pip install, no Node, no build step, no network. Every third-party import (the assistant SDK; and in the web edition cryptography, paramiko, lxml/signxml, ldap3, segno) is lazy and costs only the feature that needs it. |
+| **Shared safely on the web** | The web edition puts sign-in, 2FA, SSO, roles, per-user isolation and an audit trail in front of the same terminals; the desktop stays login-free because it is one person's machine. |
 | **One codebase, three hosts** | The same server and UI run as a desktop app, a Docker image and an ApexBuild module. Each host only decides where the server listens, where its data lives and how the window is shown. |
 | **Sessions outlive the window** | The PTY belongs to the server, not to the WebSocket. A socket can drop and reattach; the process keeps running. |
 | **Never act for the operator** | The AI is advisory: no tools, no permissions. The server tools are read-only scripts. The only state-changing action (Stop a process) takes two clicks. |
@@ -160,7 +162,32 @@ Main routes:
 - AI log and performance analyses reuse ARES Ultimate Console's prompts word
   for word, with excerpt limits of 24 KB (logs) and 96 KB (performance).
 
-### 3.5 Desktop host (`desktop.py`)
+### 3.5 Web edition (`main.py`, `web/`)
+
+`app/main.py` is the server entry for Docker, the `pre` pm2 app server and the `prod` pod. It reads
+`PORT`, `HOST`, `DATA_DIR` and the `.env` beside the code, answers `GET /healthz`, runs the
+`backup create|list|restore|prune` CLI, and otherwise starts the same server in **users** mode:
+
+| Module | Role |
+|---|---|
+| `web/db.py` | SQLite (WAL) `DATA_DIR/ares-terminal-console.db`: users, sign-in sessions, API tokens, settings, audit, activity, SSO request state |
+| `web/passwords.py`, `web/totp.py` | scrypt passwords and policy; RFC 6238 TOTP and recovery codes |
+| `web/oidc.py` | OpenID Connect (Microsoft Entra ID preset): authorization code + PKCE, ID token verified against the JWKS |
+| `web/saml.py` | SAML 2.0 service provider: redirect binding out, signed POST in, replay protection |
+| `web/ldapauth.py` | LDAP / Active Directory: service bind, escaped search, user bind, group mapping |
+| `web/tokens.py` | `ares_<id>_<secret>` API tokens, SHA-256 at rest, scopes and expiry |
+| `web/audit.py`, `web/logs.py` | audit and activity streams; ECS JSON to stdout; syslog / HTTPS forwarding with at-least-once cursors |
+| `web/backup.py` | `suite-backup/1` archives, AES-256-GCM + scrypt, local / SFTP / S3, schedule, restore |
+| `web/webapp.py` | routes: `/login`, `/auth/*`, `/account`, `/admin` + `/admin/api/*`, `/api/v1/*`, `/saml/*`, `/auth/oidc/*` |
+
+Every request is identified once (session cookie or bearer token); terminals, history, connections and
+server tools then resolve to **that user's** objects: sessions carry an owner, and each user's history
+files and shell `HOME` live in `DATA_DIR/users/<id>/`. A WebSocket is authorised at the handshake and
+registered against its sign-in session, so ending the session closes it. In **local** mode (desktop,
+`./run.sh`, ApexBuild) every request is the built-in local administrator, and the Users, SSO and Policy
+pages are hidden.
+
+### 3.6 Desktop host (`desktop.py`)
 
 - Starts the server on `127.0.0.1`, on a free port, with an access token.
 - The first copy owns the server. A second launch finds it and opens another
@@ -207,11 +234,18 @@ that the terminal did not echo is never recorded.
 | Secrets sent to Claude or OSV.dev | Preview first, secrets replaced with `***`, no address or identity, sent only on the operator's click |
 | Secrets on disk | Redaction of command lines; unechoed input never recorded |
 | Tampered download | Releases signed and verified against ARES Repository's manifest |
+| Someone on the internet reaches the web edition | Sign-in required for everything but `/healthz` and the login page; lockout per user and per address; TOTP 2FA required by default |
+| Stolen session cookie | Random 256-bit value, only a keyed hash stored; `HttpOnly`, `SameSite=Strict`, `__Host-`/`Secure` over TLS; idle and absolute expiry; admins can end every session of a user |
+| Forged SSO response | OIDC: PKCE, state, nonce, JWKS signature, issuer and audience; SAML: signature, audience, recipient, `InResponseTo`, one-time assertion IDs |
+| One user reaching another's terminals | Sessions have an owner; list, attach, kill and server tools check it; per-user data folders and homes |
+| A user getting a shell on the app's server | *Local shells* policy (administrators only by default); others may only run a parsed `ssh` command without option that runs or reads local things |
+| Leaked API token | Hash at rest, shown once, scoped, expiring, revocable; failures rate-limited and audited by id |
 
-Known limits: from source on loopback there is no login, the same trust
-boundary as the rest of ApexBuild. A token is a shared secret, not a personal
-login; over anything but a private network, put TLS in front (`https://`
-origins are accepted on the WebSocket for that purpose).
+Known limits: from source on loopback and in the desktop app there is no login, the same trust
+boundary as the rest of ApexBuild; the desktop's access token is a shared secret, not a personal login.
+In the web edition every shell runs as the server's one service account: users are separated by the
+app, not by the operating system, which is why local shells are an administrator privilege by default.
+See `docs/SECURITY.md`.
 
 ## 6. Deployment blueprint
 
@@ -220,24 +254,27 @@ origins are accepted on the WebSocket for that purpose).
 | Platform | Artifact | Built by |
 |---|---|---|
 | Linux | `.deb`, `.tar.gz` (per-user `install.sh`) | `packaging/build-linux.sh`, Debian 11 container for old glibc |
-| Arch | `.pkg.tar.zst` | `packaging/build-arch.sh` |
-| Windows | setup `.exe` (no admin rights), portable `.zip` | `packaging/build-remote.sh` on the Windows build host |
-| macOS | `.dmg`, `.zip` (Apple silicon, unsigned) | `packaging/build-remote.sh` on the macOS build host |
+| Linux | `.rpm`, `.pkg.tar.zst`, `.AppImage` | the same frozen tree, repackaged with nfpm and appimagetool |
+| Windows | setup `.exe` (no admin rights), `.msi` (WiX 5, per machine), portable `.zip` | Windows runner |
+| macOS | `.dmg`, `.zip`, Apple silicon and Intel (unsigned) | macOS runners |
 
-PyInstaller does not cross-compile, so each platform builds on its own kind of
-machine. `packaging/release.sh` signs and publishes to ARES Repository with a
-token and key kept in `~/.config/ares-repository/`, never in the repository.
+All files are `ares-terminal-console-<version>-<os>-<arch>.<ext>` in `dist/desktop/`.
+`scripts/build-desktop.sh` builds the host's formats; `.github/workflows/release.yml` builds all of them
+on a tag. PyInstaller does not cross-compile, so each platform builds on its own kind of machine
+(`packaging/build-remote.sh` does the same on build hosts named in the environment).
+`suite build desktop --from-ci latest && suite publish` signs and uploads to ARES Repository with the
+app's token and key from the ARES Platform Console, never in the repository.
 
 ### 6.2 Docker
 
 ```
-docker run -d --name ares-terminal -p 8080:8080 -v ares-terminal:/data \
-    docker.cybercontrol.tech/ares/terminal-console:latest
+docker run -d --name ares-terminal -p 3222:3222 -v ares-terminal:/app/data \
+    docker.cybercontrol.tech/ares/ares-terminal-console:latest
 ```
 
-Shells run inside the container as the unprivileged user `ares`, with bash,
-ssh, git, curl, dig, ping, jq, rsync and vim. What a pane can reach is what
-the container can reach. Published with `packaging/docker/docker-push.sh`.
+The web edition (sign-in required). Shells run inside the container as the unprivileged user `app`
+(uid 10001), with bash, ssh, git, curl, dig, ping, jq, rsync and vim. What a pane can reach is what the
+container can reach. Built and pushed with `suite docker push` (server image and the nginx web tier).
 
 ### 6.3 ApexBuild module
 
@@ -246,7 +283,20 @@ the container can reach. Published with `packaging/docker/docker-push.sh`.
 frames it, and signs the user in with a one-time ticket verified by `sso.py`
 using a key passed in the environment at launch.
 
-### 6.4 ARES Application Suite
+### 6.4 `pre` and `prod`
+
+```
+ prod:  Edge Proxy ─► ares-terminal-console-web (nginx) ─► Service ares-terminal-console-api ─► api pod ─► PVC ares-terminal-console-data
+ pre:   Edge Proxy ─► ares-terminal-console-web (nginx) ─► Service ares-terminal-console-api (no selector)
+                                                             └─ EndpointSlice ─► pm2 app server(s):3222
+```
+
+`suite deploy pre|prod` renders `k8s/base` + `k8s/overlays/<env>` with the namespace, images, replicas
+and storage class of the environment, and, for `pre`, runs `deploy.sh` (rsync, `.venv`, generate-once
+`.env`, `pm2 startOrReload` with watch, health check). The server is one replica: its terminals are its
+own processes and its database is SQLite. See `docs/DEPLOYMENT.md`.
+
+### 6.5 ARES Application Suite
 
 The suite entry and these four documents are published with
 `packaging/register-ares-suite.sh`, which uses the suite's integration API and
@@ -261,5 +311,8 @@ an integration token. See [`DESCRIPTION.md`](DESCRIPTION.md#ares-application-sui
 | `ls` wrappers on PATH, not aliases | Aliases would mean editing bash, zsh and fish rc files; the user's own alias still wins |
 | Reuse the pane's SSH connection | A second login would prompt again, from a process with no terminal to prompt in |
 | Advisory AI | The operator is there to see the command before it runs |
-| JSON files, not a database | Small, per-user data; nothing to install or migrate |
+| JSON files for terminal data, SQLite for the web edition | Terminal history stays small, per-user files; users, sessions, tokens and the audit log need queries, transactions and a consistent online backup |
+| Sign-in in the server, not a gateway in front | One process: a WebSocket is authorised where the PTY lives, with no second hop for every keystroke |
+| No sign-in on the desktop | It is one person's terminal on their own computer; a login would protect nothing the OS account does not |
+| Local shells for administrators only (web) | Every web shell is the same service account; SSH to other servers carries the user's own credentials |
 | Releases only on ARES Repository | The signed manifest proves a download; a second copy is a second thing to keep in step |

@@ -12,12 +12,13 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 ROOT = Path(SPECPATH).parent
 APP_ID = "ares-terminal-console"
 ICON = str(ROOT / "packaging" / "icons" / ("ares.ico" if sys.platform == "win32" else "ares.icns"))
-VERSION = re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "apexmodule.toml").read_text(), re.M).group(1)
+VERSION = (ROOT / "VERSION").read_text().strip()   # the one place the version lives
 
 hidden = collect_submodules("app") + collect_submodules("claude_agent_sdk")
 # Not collect_data_files("claude_agent_sdk"): that would carry its _bundled CLI, 200+ MB per platform.
 # The assistant drives the Claude Code the user installed and signed in to.
-datas = [(str(ROOT / "app" / "static"), "app/static"), (str(ROOT / "apexmodule.toml"), "."),
+datas = [(str(ROOT / "app" / "static"), "app/static"), (str(ROOT / "apexmodule.toml"), "."), (str(ROOT / "VERSION"), "."),
+         (str(ROOT / "ares.app.json"), "."),
          (str(ROOT / "packaging" / "icons" / "ares.png"), "icons"),
          (str(ROOT / "LICENSE"), ".")]
 if sys.platform in ("win32", "darwin"):
