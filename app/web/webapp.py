@@ -36,7 +36,7 @@ from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 from typing import Any, Callable
 
-from . import KEY, __version__, backup, passwords, tokens, totp
+from . import KEY, __version__, backup, health, passwords, tokens, totp
 from .audit import ACTOR_TOKEN, ACTOR_UA, Activity, Auditor
 from .db import Database
 from .logs import LOG
@@ -331,6 +331,7 @@ class WebApp:
         self.local_user = self._local_user() if mode == "local" else None
         self.audit.record("system", "Server started", detail={"version": __version__, "mode": mode,
                                                                "pid": os.getpid()})
+        self.health = health.Health(KEY, __version__, {}, started=self.started)
         self.routes = self._build_routes()
         threading.Thread(target=self._housekeeping, name="web-housekeeping", daemon=True).start()
         threading.Thread(target=self._scheduler, name="backup-scheduler", daemon=True).start()
@@ -778,6 +779,7 @@ class WebApp:
 
         # public / account
         add("GET", "/healthz", self.r_healthz)
+        add("GET", "/healthz/pingmora", self.r_pingmora)
         add("GET", "/login", self.r_page_login)
         add("GET", "/account", self.r_page_account)
         add("GET", "/admin", self.r_page_admin)
@@ -870,6 +872,26 @@ class WebApp:
         """Liveness and readiness: the database answers. Never depends on backups or forwarding."""
         self.db.one("SELECT 1 AS ok")
         return {"ok": True, "version": __version__, "app": KEY}
+
+    def r_pingmora(self, req: Request) -> Response:
+        """APEX Pingmora health status (suite-health/1). Public summary; details with a read token."""
+        self.health.checks = {"database": lambda: self.db.one("SELECT 1 AS ok") and None,
+                              "disk": health.disk_check(self.data_dir),
+                              **self.hooks.get("health_checks", dict)()}
+
+        def api_token(value: str) -> bool:
+            if not tokens.parse(value):
+                return False           # not an API token (e.g. a wrong PINGMORA_HEALTH_TOKEN)
+            try:
+                self._token_principal(req, "read")
+            except HttpError:
+                return False
+            return True
+
+        status, body = self.health.respond(req.headers.get("Authorization"), api_token)
+        r = json_response(body, status)
+        r.headers.append(("Cache-Control", "no-store"))
+        return r
 
     def _page(self, name: str) -> Response:
         p = STATIC / name

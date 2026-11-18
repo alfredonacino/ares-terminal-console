@@ -33,6 +33,7 @@ once on the first deploy and never rotated automatically (the pm2 `.env` in `pre
 | `ARES_TRUST_PROXY` | `1` | take the client IP and scheme from `X-Forwarded-For` / `X-Forwarded-Proto` (the web tier sets them). Set `0` when the server is reached directly |
 | `ARES_ENVIRONMENT` | `prod` / `pre` / `desktop` | `service.environment` in the logs |
 | `LOG_FORMAT`, `LOG_LEVEL`, `LOG_FORWARD_*` | `json`, `info` | see `docs/LOGGING.md` |
+| `PINGMORA_HEALTH_TOKEN` | unset | optional Bearer token (at least 32 characters) that lets APEX Pingmora read the details of `GET /healthz/pingmora`; unset = only API tokens with the `read` scope. **Secret.** See `docs/API.md` |
 
 ## Users
 **Admin → Users** lists every account with its role, sign-in method, 2FA state, last sign-in and whether
@@ -163,5 +164,6 @@ Users create their own under **Account → API tokens**; admins see and revoke e
 
 ## Health and logs
 - Health: `GET /healthz` (no sign-in; it does not depend on backups or SSO).
+- APEX Pingmora: `GET /healthz/pingmora` (`suite-health/1`, see `docs/API.md`).
 - `pre`: `pm2 logs ares-terminal-console` on the app server.
 - `prod`: `suite kubectl prod -n ares logs deploy/ares-terminal-console-api` (and `deploy/ares-terminal-console-web`).

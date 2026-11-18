@@ -118,7 +118,7 @@ TOKEN_PARAM = "token"
 TOKEN_COOKIE = "ares_terminal_console"
 # Paths that answer without the token: the health check a container
 # orchestrator polls, and nothing that touches a shell.
-OPEN_PATHS = ("/api/health", "/healthz")
+OPEN_PATHS = ("/api/health", "/healthz", "/healthz/pingmora")
 
 # The web layer (app/web): sign-in, users, 2FA, SSO, API tokens, audit, log forwarding, backup.
 #   "users": the web edition (Docker, pm2, Kubernetes): everyone signs in.
@@ -995,8 +995,16 @@ def _web_hooks() -> dict:
             _USER_DATA.pop(uid, None)
         shutil.rmtree(os.path.join(DATA_DIR, "users", str(int(uid))), ignore_errors=True)
 
+    def health_checks():
+        """Pingmora: a terminal needs a pty; without one the app cannot serve its purpose."""
+        def terminals():
+            if pty_session.supported():
+                return {"status": "up"}
+            return {"status": "down", "message": "no pty support on this platform"}
+        return {"terminals": terminals}
+
     hooks = {"terminals": terminals, "kill_terminal": kill_terminal, "user_disabled": close_user,
-             "user_deleted": user_deleted, "shutdown": REGISTRY.close_all}
+             "user_deleted": user_deleted, "shutdown": REGISTRY.close_all, "health_checks": health_checks}
     if MODE == "local":
         from app.web.webapp import reexec
         hooks["restart"] = reexec

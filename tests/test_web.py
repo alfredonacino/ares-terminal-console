@@ -26,6 +26,8 @@ sys.path.insert(0, str(ROOT))
 
 from app.web import totp  # noqa: E402
 
+PINGMORA = "pingmora-test-token-0123456789abcdef"
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -76,7 +78,7 @@ class WebEdition(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="ares-web-test-")
         cls.port = _free_port()
         env = dict(os.environ, DATA_DIR=cls.tmp, PORT=str(cls.port), HOST="127.0.0.1", ARES_TRUST_PROXY="0",
-                   LOG_FORMAT="json", ARES_BACKUP_PASSPHRASE="")
+                   LOG_FORMAT="json", ARES_BACKUP_PASSPHRASE="", PINGMORA_HEALTH_TOKEN=PINGMORA)
         env.pop("ARES_ADMIN_PASSWORD", None)
         cls.proc = subprocess.Popen([sys.executable, str(ROOT / "app" / "main.py")], env=env,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -233,6 +235,25 @@ class WebEdition(unittest.TestCase):
         a.json("DELETE", f"/auth/tokens/{adm['info']['id']}")
         self.assertEqual(ta.call("GET", "/api/v1/admin/users")[0], 401)
         self.assertEqual(Client(self.base, bearer="ares_deadbeef_" + "x" * 43).call("GET", "/api/v1/me")[0], 401)
+
+    def test_04b_pingmora_health(self):
+        st, body, h = Client(self.base).call("GET", "/healthz/pingmora")
+        self.assertEqual(st, 200)
+        self.assertEqual(h.get("Cache-Control"), "no-store")
+        self.assertTrue(h.get("Content-Type", "").startswith("application/json"))
+        out = json.loads(body)
+        self.assertEqual(set(out), {"format", "key", "status", "time"})
+        self.assertEqual((out["format"], out["key"]), ("suite-health/1", "ares-terminal-console"))
+        out = json.loads(Client(self.base, bearer="wrong-" + PINGMORA).call("GET", "/healthz/pingmora")[1])
+        self.assertNotIn("checks", out)
+        out = json.loads(Client(self.base, bearer=PINGMORA).call("GET", "/healthz/pingmora")[1])
+        self.assertEqual(out["version"], (ROOT / "VERSION").read_text().strip())
+        self.assertEqual(out["checks"]["database"]["status"], "up")
+        self.assertIn("disk", out["checks"])
+        self.assertIn("terminals", out["checks"])
+        tok = self._admin().json("POST", "/auth/tokens", {"name": "pingmora", "scopes": ["read"]})["token"]
+        out = json.loads(Client(self.base, bearer=tok).call("GET", "/healthz/pingmora")[1])
+        self.assertIn("checks", out)
 
     def test_05_audit_and_activity(self):
         a = self._admin()

@@ -172,6 +172,30 @@ curl -fsS -X POST "${H[@]}" "${J[@]}" \
 
 `GET /api/v1/openapi.json` is the authoritative list for the version you are talking to.
 
+## Pingmora health status
+`GET /healthz/pingmora` is the health status APEX Pingmora's *Suite health* monitors read
+(`suite-health/1`). It needs no sign-in and is never cached (`Cache-Control: no-store`). It answers
+**200** while `status` is `up` or `degraded` and **503** when it is `down`. The checks (database,
+disk space under `DATA_DIR`, pty support for terminals) run at most once every 10 seconds, each with a
+2 s timeout.
+
+Without a token it returns only the public summary:
+```bash
+curl -s <url>/healthz/pingmora
+# {"format": "suite-health/1", "key": "ares-terminal-console", "status": "up", "time": "2026-11-18T10:00:00Z"}
+```
+
+With `Authorization: Bearer` and either an API token with the `read` scope or the deployment's
+`PINGMORA_HEALTH_TOKEN` (see `docs/ADMIN_GUIDE.md`), it adds `version`, `uptimeSeconds` and `checks`:
+```bash
+curl -s -H "Authorization: Bearer $PINGMORA_HEALTH_TOKEN" <url>/healthz/pingmora
+# {..., "version": "2.4.0", "uptimeSeconds": 86400,
+#  "checks": {"database": {"status": "up", "latencyMs": 0.4},
+#             "disk": {"status": "up", "message": "DATA_DIR 61% free (120.3 GB)"},
+#             "terminals": {"status": "up"}}}
+```
+A missing or wrong token is not an error: the public summary is returned.
+
 ## Audit
 Every API call is written to the activity log with the token's `id`, and every failed token use to
 the audit log (see `docs/LOGGING.md`).

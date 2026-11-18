@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- `GET /healthz/pingmora`: the health status APEX Pingmora reads (`suite-health/1`): a public summary, and with an API token (`read`) or `PINGMORA_HEALTH_TOKEN` the version, uptime and the database, disk and terminal checks.
+
 ## [2.4.0]
 - **Web application.** `app/main.py` serves ARES Terminal Console as a web app (Docker, the `pre` pm2 app server, the `prod` Kubernetes pod), with sign-in in front of everything but `/healthz`. The desktop app, `./run.sh` and ApexBuild stay as they were: **no sign-in**.
 - **User administration**: users with roles (administrator, user), created by an administrator or on first SSO sign-in; disable, reset password, reset 2FA, sign out everywhere, delete. The first administrator is **`aresadmin`**, with a one-time password in `DATA_DIR/initial-admin-password.txt` (or `ARES_ADMIN_PASSWORD`) that must be changed at first sign-in.
