@@ -91,7 +91,7 @@ for p in $PLATFORMS; do
   cp "$LOGS/$p-dist/"*"$VERSION"* "$DIST/"
 done
 # Merge every SHA256SUMS that names this version into dist/desktop/SHA256SUMS.
-cat "$DIST/SHA256SUMS" "$LOGS"/*-dist/SHA256SUMS 2>/dev/null | tr -d '\r' | sed 's/ \*/  /' \
+{ cat "$DIST/SHA256SUMS" "$LOGS"/*-dist/SHA256SUMS 2>/dev/null || true; } | tr -d '\r' | sed 's/ \*/  /' \
   | awk 'NF==2 {sums[$2]=$0} END {for (f in sums) print sums[f]}' | sort -k2 \
   | while read -r sum name; do [ -f "$DIST/$name" ] && printf '%s  %s\n' "$sum" "$name"; done \
   > "$LOGS/SHA256SUMS.merged"   # only files still in dist/: an old version's entries go
