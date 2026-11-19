@@ -7,6 +7,7 @@
 ### Changed
 - Suite documents: diagrams throughout the Executive Summary, Product Description and Architecture, and a Changes document built from this changelog.
 - CI builds the macOS installers on the `macos-15` (Apple silicon) and `macos-15-intel` runners; the `macos-13` and `macos-14` runners are retired.
+- macOS Intel installer: cryptography stays on 48.x (the last release with a macOS Intel wheel), so the bundled OpenSSL matches.
 - `packaging/build-remote.sh` writes the merged `SHA256SUMS` even when `dist/desktop` has none yet.
 
 ## [2.4.0]
