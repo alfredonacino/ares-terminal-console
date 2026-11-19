@@ -1,8 +1,13 @@
 # Changelog
 
-## [Unreleased]
+## [2.4.1]
 ### Added
 - `GET /healthz/pingmora`: the health status APEX Pingmora reads (`suite-health/1`): a public summary, and with an API token (`read`) or `PINGMORA_HEALTH_TOKEN` the version, uptime and the database, disk and terminal checks.
+
+### Changed
+- Suite documents: diagrams throughout the Executive Summary, Product Description and Architecture, and a Changes document built from this changelog.
+- CI builds the macOS installers on the `macos-15` (Apple silicon) and `macos-15-intel` runners; the `macos-13` and `macos-14` runners are retired.
+- `packaging/build-remote.sh` writes the merged `SHA256SUMS` even when `dist/desktop` has none yet.
 
 ## [2.4.0]
 - **Web application.** `app/main.py` serves ARES Terminal Console as a web app (Docker, the `pre` pm2 app server, the `prod` Kubernetes pod), with sign-in in front of everything but `/healthz`. The desktop app, `./run.sh` and ApexBuild stay as they were: **no sign-in**.
