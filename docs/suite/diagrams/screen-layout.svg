@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 990 600" width="990" height="600" font-family="Noto Sans, sans-serif" role="img" aria-label="The main window">
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6280"/></marker>
+</defs>
+<!-- window -->
+<rect x="20" y="14" width="700" height="572" rx="12" fill="#070b15" stroke="#0891b2" stroke-width="2"/>
+<!-- top bar -->
+<rect x="20" y="14" width="700" height="44" rx="12" fill="#0f1729"/>
+<rect x="20" y="40" width="700" height="18" fill="#0f1729"/>
+<rect x="34" y="25" width="22" height="22" rx="5" fill="#22d3ee"/>
+<text x="45" y="41" font-size="12" font-weight="800" fill="#070b15" text-anchor="middle">&gt;_</text>
+<text x="64" y="41" font-size="12.5" font-weight="700" fill="#e6f6ff">ARES Terminal</text>
+<g font-size="10.5" fill="#cfe9f5">
+  <rect x="166" y="26" width="52" height="20" rx="4" fill="#1b2740"/><text x="192" y="40" text-anchor="middle">+ Pane</text>
+  <rect x="224" y="26" width="24" height="20" rx="4" fill="#1b2740"/><text x="236" y="40" text-anchor="middle">◫</text>
+  <rect x="252" y="26" width="24" height="20" rx="4" fill="#1b2740"/><text x="264" y="40" text-anchor="middle">⊟</text>
+  <rect x="282" y="26" width="70" height="20" rx="4" fill="#1b2740"/><text x="317" y="40" text-anchor="middle">Broadcast</text>
+  <rect x="358" y="26" width="62" height="20" rx="4" fill="#1b2740"/><text x="389" y="40" text-anchor="middle">Anti-idle</text>
+  <rect x="426" y="26" width="36" height="20" rx="4" fill="#1b2740"/><text x="444" y="40" text-anchor="middle">ask</text>
+  <rect x="468" y="26" width="30" height="20" rx="4" fill="#1b2740"/><text x="483" y="40" text-anchor="middle">☰</text>
+  <rect x="534" y="26" width="52" height="20" rx="4" fill="#1b2740"/><text x="560" y="40" text-anchor="middle">Admin</text>
+  <rect x="592" y="26" width="58" height="20" rx="4" fill="#1b2740"/><text x="621" y="40" text-anchor="middle">Account</text>
+  <rect x="656" y="26" width="54" height="20" rx="4" fill="#1b2740"/><text x="683" y="40" text-anchor="middle">Sign out</text>
+</g>
+<!-- tab strip -->
+<rect x="20" y="58" width="700" height="30" fill="#0b1222"/>
+<rect x="30" y="62" width="110" height="26" rx="5" fill="#070b15" stroke="#22d3ee"/>
+<text x="85" y="79" font-size="11" fill="#e6f6ff" text-anchor="middle">web servers</text>
+<rect x="146" y="62" width="80" height="26" rx="5" fill="#141d33"/>
+<text x="186" y="79" font-size="11" fill="#9fb3c8" text-anchor="middle">db1</text>
+<rect x="232" y="62" width="26" height="26" rx="5" fill="#141d33"/>
+<text x="245" y="79" font-size="12" fill="#9fb3c8" text-anchor="middle">+</text>
+<rect x="264" y="62" width="82" height="26" rx="5" fill="#141d33"/>
+<text x="305" y="79" font-size="11" fill="#9fb3c8" text-anchor="middle">⇄ connect…</text>
+<!-- pane 1 (focused) -->
+<rect x="30" y="96" width="380" height="404" rx="6" fill="#0a1020" stroke="#22d3ee" stroke-width="1.6"/>
+<rect x="30" y="96" width="380" height="24" rx="6" fill="#12203a"/>
+<text x="40" y="112" font-size="10.5" font-weight="700" fill="#e6f6ff">ssh ops@web1</text>
+<text x="400" y="112" font-size="10" fill="#7dd3fc" text-anchor="end">web1.example.com · /var/www</text>
+<g font-family="Noto Sans Mono, monospace" font-size="10.5" fill="#cbd5e1">
+  <text x="40" y="142"><tspan fill="#4ade80">ops@web1</tspan>:<tspan fill="#60a5fa">/var/www</tspan>$ ls</text>
+  <text x="40" y="158"><tspan fill="#60a5fa">releases</tspan>  <tspan fill="#60a5fa">shared</tspan>  <tspan fill="#22d3ee">current</tspan></text>
+  <text x="40" y="174"><tspan fill="#4ade80">ops@web1</tspan>:<tspan fill="#60a5fa">/var/www</tspan>$ systemctl status demo-app</text>
+  <text x="40" y="190">● demo-app.service - Demo application</text>
+  <text x="40" y="206">   Active: <tspan fill="#4ade80">active (running)</tspan></text>
+  <text x="40" y="222"><tspan fill="#4ade80">ops@web1</tspan>:<tspan fill="#60a5fa">/var/www</tspan>$ ▌</text>
+</g>
+<!-- server card -->
+<rect x="250" y="128" width="152" height="118" rx="7" fill="#101a30" stroke="#b14cff" stroke-width="1.4"/>
+<text x="260" y="145" font-size="10.5" font-weight="700" fill="#e6f6ff">web1 · Debian 12</text>
+<g font-size="9.5" fill="#cfe9f5">
+  <text x="260" y="162">♥ Health &amp; processes</text>
+  <text x="260" y="176">⚡ Performance</text>
+  <text x="260" y="190">☰ Logs   ✦ AI logs</text>
+  <text x="260" y="204">▤ Packages</text>
+  <text x="260" y="218">⛨ Vulnerability scan</text>
+  <text x="260" y="232">↺ Server history</text>
+</g>
+<!-- pane 2 -->
+<rect x="418" y="96" width="292" height="198" rx="6" fill="#0a1020" stroke="#334155"/>
+<rect x="418" y="96" width="292" height="24" rx="6" fill="#141d33"/>
+<text x="428" y="112" font-size="10.5" font-weight="700" fill="#cbd5e1">ssh ops@web2</text>
+<text x="700" y="112" font-size="10" fill="#7dd3fc" text-anchor="end">web2.example.com · ~</text>
+<g font-family="Noto Sans Mono, monospace" font-size="10.5" fill="#cbd5e1">
+  <text x="428" y="142"><tspan fill="#4ade80">ops@web2</tspan>:~$ uptime</text>
+  <text x="428" y="158"> 10:42:07 up 12 days, load 0.08</text>
+  <text x="428" y="174"><tspan fill="#4ade80">ops@web2</tspan>:~$ ▌</text>
+</g>
+<!-- pane 3 -->
+<rect x="418" y="302" width="292" height="198" rx="6" fill="#0a1020" stroke="#334155"/>
+<rect x="418" y="302" width="292" height="24" rx="6" fill="#141d33"/>
+<text x="428" y="318" font-size="10.5" font-weight="700" fill="#cbd5e1">ssh ops@web3</text>
+<text x="700" y="318" font-size="10" fill="#7dd3fc" text-anchor="end">web3.example.com · /etc</text>
+<g font-family="Noto Sans Mono, monospace" font-size="10.5" fill="#cbd5e1">
+  <text x="428" y="348"><tspan fill="#4ade80">ops@web3</tspan>:/etc$ ▌</text>
+</g>
+<!-- ask bar -->
+<rect x="30" y="510" width="680" height="64" rx="6" fill="#0f1729" stroke="#334155"/>
+<text x="42" y="531" font-size="10.5" font-weight="700" fill="#22d3ee">ask</text>
+<text x="72" y="531" font-size="10.5" fill="#cbd5e1">what is listening on port 8443?</text>
+<text x="42" y="556" font-family="Noto Sans Mono, monospace" font-size="10.5" fill="#e6f6ff">ss -ltnp 'sport = :8443'</text>
+<rect x="634" y="543" width="64" height="20" rx="4" fill="#1b2740"/>
+<text x="666" y="557" font-size="10" fill="#cfe9f5" text-anchor="middle">INSERT</text>
+<!-- callouts -->
+<g font-size="15" fill="#161a2e">
+  <line x1="728" y1="36" x2="752" y2="36" stroke="#5b6280" stroke-width="1.3"/>
+  <text x="758" y="32" font-weight="700">1 Top bar</text>
+  <text x="758" y="50" font-size="13" fill="#5b6280">panes, splits, broadcast, anti-idle,</text>
+  <text x="758" y="66" font-size="13" fill="#5b6280">ask, drawer, admin, account</text>
+
+  <line x1="728" y1="75" x2="752" y2="88" stroke="#5b6280" stroke-width="1.3"/>
+  <text x="758" y="92" font-weight="700">2 Tabs</text>
+  <text x="758" y="110" font-size="13" fill="#5b6280">one per connection, each with</text>
+  <text x="758" y="126" font-size="13" fill="#5b6280">its own splits; ⇄ connect…</text>
+
+  <line x1="718" y1="108" x2="752" y2="150" stroke="#5b6280" stroke-width="1.3"/>
+  <text x="758" y="154" font-weight="700">3 Pane bar</text>
+  <text x="758" y="172" font-size="13" fill="#5b6280">label, host, IP address and</text>
+  <text x="758" y="188" font-size="13" fill="#5b6280">current directory, kept current</text>
+
+  <line x1="404" y1="246" x2="752" y2="222" stroke="#b14cff" stroke-width="1.3"/>
+  <text x="758" y="218" font-weight="700">4 Server card</text>
+  <text x="758" y="236" font-size="13" fill="#5b6280">the seven read-only tools for</text>
+  <text x="758" y="252" font-size="13" fill="#5b6280">the focused pane; folds to ◈</text>
+
+  <line x1="712" y1="400" x2="752" y2="300" stroke="#5b6280" stroke-width="1.3"/>
+  <text x="758" y="296" font-weight="700">5 Split panes</text>
+  <text x="758" y="314" font-size="13" fill="#5b6280">a tree of splits; drag a</text>
+  <text x="758" y="330" font-size="13" fill="#5b6280">divider to resize</text>
+
+  <line x1="712" y1="540" x2="752" y2="530" stroke="#5b6280" stroke-width="1.3"/>
+  <text x="758" y="526" font-weight="700">6 Ask bar</text>
+  <text x="758" y="544" font-size="13" fill="#5b6280">a suggested command; INSERT</text>
+  <text x="758" y="560" font-size="13" fill="#5b6280">puts it at the prompt, unsent</text>
+</g>
+</svg>

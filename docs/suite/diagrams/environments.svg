@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" font-family="Noto Sans, sans-serif" role="img" aria-label="Environments">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6280"/></marker></defs>
+
+<!-- prod -->
+<rect x="14" y="10" width="300" height="480" rx="14" fill="#e6fbff" stroke="#0891b2" stroke-width="1.5"/>
+<text x="32" y="40" font-size="16" font-weight="800" fill="#161a2e">prod · Production</text>
+<text x="32" y="60" font-size="12" fill="#5b6280">production Kubernetes cluster, namespace ares</text>
+<rect x="32" y="80" width="264" height="58" rx="8" fill="#fff" stroke="#0891b2" stroke-width="1.4"/>
+<text x="164" y="104" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">Edge proxy (TLS)</text>
+<text x="164" y="122" font-size="11" fill="#5b6280" text-anchor="middle">ares-terminal-console.nacino.net</text>
+<line x1="164" y1="140" x2="164" y2="166" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="32" y="168" width="264" height="58" rx="8" fill="#fff" stroke="#0891b2" stroke-width="1.4"/>
+<text x="164" y="192" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">ares-terminal-console-web</text>
+<text x="164" y="210" font-size="11" fill="#5b6280" text-anchor="middle">nginx :8080, HTTP + WebSocket</text>
+<line x1="164" y1="228" x2="164" y2="254" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="32" y="256" width="264" height="74" rx="8" fill="#fff" stroke="#0891b2" stroke-width="1.4"/>
+<text x="164" y="280" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">ares-terminal-console-api</text>
+<text x="164" y="298" font-size="11" fill="#5b6280" text-anchor="middle">pod, 1 replica, Recreate, :3222</text>
+<text x="164" y="314" font-size="11" fill="#5b6280" text-anchor="middle">non-root, capabilities dropped</text>
+<line x1="164" y1="332" x2="164" y2="358" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="32" y="360" width="264" height="58" rx="8" fill="#fff" stroke="#0891b2" stroke-width="1.4"/>
+<text x="164" y="384" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">PVC ares-terminal-console-data</text>
+<text x="164" y="402" font-size="11" fill="#5b6280" text-anchor="middle">5 Gi, ReadWriteOnce, /app/data</text>
+<text x="32" y="446" font-size="11.5" fill="#161a2e">Secret ares-terminal-console-env: APP_KEY</text>
+<text x="32" y="464" font-size="11.5" fill="#161a2e">and settings, generated once by suite deploy</text>
+
+<!-- pre -->
+<rect x="330" y="10" width="300" height="480" rx="14" fill="#f6efff" stroke="#b14cff" stroke-width="1.5"/>
+<text x="348" y="40" font-size="16" font-weight="800" fill="#161a2e">pre · Demo</text>
+<text x="348" y="60" font-size="12" fill="#5b6280">preproduction cluster + pm2 app server</text>
+<rect x="348" y="80" width="264" height="58" rx="8" fill="#fff" stroke="#b14cff" stroke-width="1.4"/>
+<text x="480" y="104" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">Edge proxy (TLS)</text>
+<text x="480" y="122" font-size="11" fill="#5b6280" text-anchor="middle">ares-terminal-console-demo.nacino.net</text>
+<line x1="480" y1="140" x2="480" y2="166" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="348" y="168" width="264" height="58" rx="8" fill="#fff" stroke="#b14cff" stroke-width="1.4"/>
+<text x="480" y="192" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">ares-terminal-console-web</text>
+<text x="480" y="210" font-size="11" fill="#5b6280" text-anchor="middle">nginx on the preproduction cluster</text>
+<line x1="480" y1="228" x2="480" y2="254" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="348" y="256" width="264" height="74" rx="8" fill="#fff" stroke="#b14cff" stroke-width="1.4"/>
+<text x="480" y="280" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">Service ares-terminal-console-api</text>
+<text x="480" y="298" font-size="11" fill="#5b6280" text-anchor="middle">no selector: endpoints point</text>
+<text x="480" y="314" font-size="11" fill="#5b6280" text-anchor="middle">at the pm2 app server(s)</text>
+<line x1="480" y1="332" x2="480" y2="358" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="348" y="360" width="264" height="58" rx="8" fill="#fff" stroke="#b14cff" stroke-width="1.4"/>
+<text x="480" y="384" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">pm2 ares-terminal-console</text>
+<text x="480" y="402" font-size="11" fill="#5b6280" text-anchor="middle">:3222, watch on, data/ beside the code</text>
+<text x="348" y="446" font-size="11.5" fill="#161a2e">.env (mode 600): APP_KEY and settings,</text>
+<text x="348" y="464" font-size="11.5" fill="#161a2e">generated once by deploy.sh</text>
+
+<!-- desktop -->
+<rect x="646" y="10" width="300" height="480" rx="14" fill="#f6f7fb" stroke="#5b6280" stroke-width="1.5"/>
+<text x="664" y="40" font-size="16" font-weight="800" fill="#161a2e">Desktop app</text>
+<text x="664" y="60" font-size="12" fill="#5b6280">Windows, macOS, Linux: one person</text>
+<rect x="664" y="80" width="264" height="58" rx="8" fill="#fff" stroke="#5b6280" stroke-width="1.4"/>
+<text x="796" y="104" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">Native window</text>
+<text x="796" y="122" font-size="11" fill="#5b6280" text-anchor="middle">Qt WebEngine · WebView2 · WKWebView</text>
+<line x1="796" y1="140" x2="796" y2="166" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="664" y="168" width="264" height="58" rx="8" fill="#fff" stroke="#5b6280" stroke-width="1.4"/>
+<text x="796" y="192" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">Loopback + access token</text>
+<text x="796" y="210" font-size="11" fill="#5b6280" text-anchor="middle">127.0.0.1, a free port, HttpOnly cookie</text>
+<line x1="796" y1="228" x2="796" y2="254" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="664" y="256" width="264" height="74" rx="8" fill="#fff" stroke="#5b6280" stroke-width="1.4"/>
+<text x="796" y="280" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">The same server, local mode</text>
+<text x="796" y="298" font-size="11" fill="#5b6280" text-anchor="middle">in-process, PyInstaller bundle,</text>
+<text x="796" y="314" font-size="11" fill="#5b6280" text-anchor="middle">no sign-in, built-in local admin</text>
+<line x1="796" y1="332" x2="796" y2="358" stroke="#5b6280" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="664" y="360" width="264" height="58" rx="8" fill="#fff" stroke="#5b6280" stroke-width="1.4"/>
+<text x="796" y="384" font-size="13.5" font-weight="700" fill="#161a2e" text-anchor="middle">Data folder in the profile</text>
+<text x="796" y="402" font-size="11" fill="#5b6280" text-anchor="middle">JSON history + SQLite for admin pages</text>
+<text x="664" y="446" font-size="11.5" fill="#161a2e">Logs also to logs/ares-terminal-console.jsonl</text>
+<text x="664" y="464" font-size="11.5" fill="#161a2e">(rotated at 10 MB, 5 files kept)</text>
+</svg>
