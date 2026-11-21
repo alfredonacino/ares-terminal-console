@@ -57,8 +57,10 @@ def verify(secret: str, code: str, last_step: int = 0, at: float | None = None) 
 
 def otpauth_uri(secret: str, account: str, issuer: str) -> str:
     label = quote(f"{issuer}:{account}", safe="@")
+    # quote_via=quote: spaces as %20, not '+', which some authenticator apps show literally.
     return f"otpauth://totp/{label}?" + urlencode(
-        {"secret": secret, "issuer": issuer, "algorithm": "SHA1", "digits": DIGITS, "period": STEP})
+        {"secret": secret, "issuer": issuer, "algorithm": "SHA1", "digits": DIGITS, "period": STEP},
+        quote_via=quote)
 
 
 def qr_svg(data: str) -> str:
@@ -70,8 +72,11 @@ def qr_svg(data: str) -> str:
     except ImportError:
         return ""
     buf = io.BytesIO()
-    segno.make(data, error="m").save(buf, kind="svg", scale=5, border=2, dark="#000", light="#fff",
-                                     xmldecl=False, svgns=True)
+    # omitsize: a viewBox instead of a fixed width/height, so the code scales to the box the page
+    # gives it instead of being cropped (a cropped code cannot be scanned). border=4 is the quiet
+    # zone the QR standard asks for; phone cameras miss codes with less.
+    segno.make(data, error="m").save(buf, kind="svg", scale=1, border=4, dark="#000", light="#fff",
+                                     xmldecl=False, svgns=True, omitsize=True)
     return buf.getvalue().decode()
 
 

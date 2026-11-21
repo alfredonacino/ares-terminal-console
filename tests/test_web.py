@@ -72,6 +72,20 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+class QrCode(unittest.TestCase):
+    def test_uri_has_no_plus_signs(self):
+        uri = totp.otpauth_uri("ABC", "aresadmin", "ARES Terminal Console")
+        self.assertNotIn("+", uri)
+        self.assertIn("issuer=ARES%20Terminal%20Console", uri)
+
+    def test_svg_scales_instead_of_cropping(self):
+        svg = totp.qr_svg("otpauth://totp/x?secret=ABC")
+        if not svg:
+            self.skipTest("segno is not installed")
+        self.assertIn("viewBox=", svg)
+        self.assertNotIn(' width="', svg.split(">", 1)[0])
+
+
 class WebEdition(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

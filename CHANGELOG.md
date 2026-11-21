@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.4.2]
+### Fixed
+- Two-factor enrolment: phone cameras could not read the QR code. It was drawn 285 px wide in a 200 px box and cropped; it now scales to its box (an SVG `viewBox`) with the standard four-module quiet zone. The `otpauth://` link writes spaces as `%20` instead of `+`, which some authenticator apps showed in the account name.
+
 ## [2.4.1]
 ### Added
 - `GET /healthz/pingmora`: the health status APEX Pingmora reads (`suite-health/1`): a public summary, and with an API token (`read`) or `PINGMORA_HEALTH_TOKEN` the version, uptime and the database, disk and terminal checks.

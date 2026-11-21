@@ -152,7 +152,7 @@ table.health .h-detail { color: var(--text-2); word-break: break-word; }
 .brand img { width: 38px; height: 38px; flex: none; }
 .topbar .brand img { width: 28px; height: 28px; }
 .qr { background: #fff; border-radius: 8px; padding: 8px; display: inline-block; margin: 8px 0; }
-.qr svg { display: block; width: 200px; height: 200px; }
+.qr svg { display: block; width: 240px; max-width: 70vw; height: auto; aspect-ratio: 1; shape-rendering: crispEdges; }
 .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 14px; font-family: var(--mono);
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 10px 0; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
